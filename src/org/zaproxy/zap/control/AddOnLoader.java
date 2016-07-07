@@ -838,18 +838,7 @@ public class AddOnLoader extends URLClassLoader {
 				local JAR path.
 			 */
 			if (jarFile.startsWith("http")) {
-				try {
-					final File localJar = new File(
-						AddOnLoader.class
-							.getProtectionDomain()
-							.getCodeSource()
-							.getLocation()
-							.toURI().getPath());
-
-					jarFile = localJar.toURI().toString();
-				} catch (URISyntaxException e) {
-					logger.error(e.getMessage(), e);
-				}
+				jarFile = new File(System.getProperty("LocalIridiumJARFile")).toURI().toString();
 			}
             
             try {
