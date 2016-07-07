@@ -831,6 +831,26 @@ public class AddOnLoader extends URLClassLoader {
             jarFile = local.toString().substring("jar:".length());
             int pos = jarFile.indexOf("!");
             jarFile = jarFile.substring(0, pos);
+
+			/*
+				When ZAP is bundled as a Web Start JAR file, the local path
+				will be http://blah. In this case we need to find the actual
+				local JAR path.
+			 */
+			if (jarFile.startsWith("http")) {
+				try {
+					final File localJar = new File(
+						AddOnLoader.class
+							.getProtectionDomain()
+							.getCodeSource()
+							.getLocation()
+							.toURI().getPath());
+
+					jarFile = localJar.toURI().toString();
+				} catch (URISyntaxException e) {
+					logger.error(e.getMessage(), e);
+				}
+			}
             
             try {
                 // ZAP: Changed to take into account the package name
