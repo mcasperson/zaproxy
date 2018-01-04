@@ -151,9 +151,7 @@ public class ContextAuthenticationPanel extends AbstractContextPropertiesPanel {
 	 * a parameter, nothing is shown. If the provided method type does not require configuration, a
 	 * simple message is shown stating that no configuration is needed.
 	 * 
-	 * @param newMethodType the new method type. If null, nothing is shown. If does not require
-	 *            config, a message is shown, on a panel returned by
-	 *            {@link ContextAuthenticationPanel#getNoMethodConfigurationPanel()}).
+	 * @param newMethodType the new method type. If null, nothing is shown.
 	 */
 	private void changeMethodConfigPanel(AuthenticationMethodType newMethodType) {
 		// If there's no new method, don't display anything
@@ -248,8 +246,7 @@ public class ContextAuthenticationPanel extends AbstractContextPropertiesPanel {
 	 * @return true, if successful
 	 */
 	private boolean confirmAndExecuteUsersDeletion() {
-		ExtensionUserManagement usersExtension = (ExtensionUserManagement) Control.getSingleton()
-				.getExtensionLoader().getExtension(ExtensionUserManagement.NAME);
+		ExtensionUserManagement usersExtension = Control.getSingleton().getExtensionLoader().getExtension(ExtensionUserManagement.class);
 		if (usersExtension != null) {
 			if (usersExtension.getSharedContextUsers(getUISharedContext()).size() > 0) {
 				authenticationMethodsComboBox.transferFocus();

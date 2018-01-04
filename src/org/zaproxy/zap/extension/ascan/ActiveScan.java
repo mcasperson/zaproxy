@@ -45,6 +45,7 @@ import org.parosproxy.paros.network.ConnectionParam;
 import org.parosproxy.paros.network.HttpMalformedHeaderException;
 import org.parosproxy.paros.network.HttpMessage;
 import org.parosproxy.paros.view.View;
+import org.zaproxy.zap.extension.ruleconfig.RuleConfigParam;
 import org.zaproxy.zap.model.GenericScanner2;
 import org.zaproxy.zap.model.Target;
 
@@ -82,9 +83,15 @@ public class ActiveScan extends org.parosproxy.paros.core.scanner.Scanner implem
 
 	private static final Logger log = Logger.getLogger(ActiveScan.class);
 
+	@Deprecated
 	public ActiveScan(String displayName, ScannerParam scannerParam, 
 			ConnectionParam param, ScanPolicy scanPolicy) {
-		super(scannerParam, param, scanPolicy);
+		this(displayName, scannerParam, param, scanPolicy, null);
+	}
+
+	public ActiveScan(String displayName, ScannerParam scannerParam, 
+			ConnectionParam param, ScanPolicy scanPolicy, RuleConfigParam ruleConfigParam) {
+		super(scannerParam, param, scanPolicy, ruleConfigParam);
 		this.displayName = displayName;
 		this.maxResultsToList = scannerParam.getMaxResultsToList();
 		// Easiest way to get the messages and alerts ;) 
@@ -255,32 +262,35 @@ public class ActiveScan extends org.parosproxy.paros.core.scanner.Scanner implem
 		}
 		
 		this.rcTotals.incResponseCodeCount(msg.getResponseHeader().getStatusCode());
-		
-        if (hRef != null && this.rcTotals.getTotal() <= this.maxResultsToList) {
-            // Very large lists significantly impact the UI responsiveness
-            // limiting them makes large scans _much_ quicker
-        	addHistoryReference(hRef);
-    	}
+
+		if (hRef != null && View.isInitialised()) {
+			// Very large lists significantly impact the UI responsiveness
+			// limiting them makes large scans _much_ quicker
+			if (this.rcTotals.getTotal() > this.maxResultsToList) {
+				removeFirstHistoryReferenceInEdt();
+			}
+			addHistoryReferenceInEdt(hRef);
+		}
 	}
 
-    private void addHistoryReference(HistoryReference hRef) {
-        if (View.isInitialised()) {
-            addHistoryReferenceInEdt(hRef);
-        }
+	private void addHistoryReferenceInEdt(final HistoryReference hRef) {
+		EventQueue.invokeLater(new Runnable() {
+
+			@Override
+			public void run() {
+				messagesTableModel.addHistoryReference(hRef);
+			}
+		});
 	}
 
-    private void addHistoryReferenceInEdt(final HistoryReference hRef) {
-        if (EventQueue.isDispatchThread()) {
-            messagesTableModel.addHistoryReference(hRef);
-        } else {
-            EventQueue.invokeLater(new Runnable() {
+	private void removeFirstHistoryReferenceInEdt() {
+		EventQueue.invokeLater(new Runnable() {
 
-                @Override
-                public void run() {
-                    addHistoryReference(hRef);
-                }
-            });
-        }
+			@Override
+			public void run() {
+				messagesTableModel.removeHistoryReference(getMessagesTableModel().getEntry(0).getHistoryReference());
+			}
+		});
 	}
 	
 	@Override

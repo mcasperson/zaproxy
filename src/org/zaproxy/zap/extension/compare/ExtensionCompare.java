@@ -23,7 +23,6 @@ import java.awt.EventQueue;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.text.MessageFormat;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -38,7 +37,6 @@ import org.apache.commons.httpclient.URI;
 import org.apache.log4j.Logger;
 import org.parosproxy.paros.Constant;
 import org.parosproxy.paros.control.Control.Mode;
-import org.parosproxy.paros.db.Database;
 import org.parosproxy.paros.db.DatabaseException;
 import org.parosproxy.paros.db.RecordHistory;
 import org.parosproxy.paros.db.TableHistory;
@@ -46,6 +44,7 @@ import org.parosproxy.paros.db.paros.ParosDatabase;
 import org.parosproxy.paros.extension.ExtensionAdaptor;
 import org.parosproxy.paros.extension.ExtensionHook;
 import org.parosproxy.paros.extension.SessionChangedListener;
+import org.parosproxy.paros.extension.option.DatabaseParam;
 import org.parosproxy.paros.extension.report.ReportGenerator;
 import org.parosproxy.paros.model.HistoryReference;
 import org.parosproxy.paros.model.Model;
@@ -57,19 +56,23 @@ import org.zaproxy.zap.utils.DesktopUtils;
 
 public class ExtensionCompare extends ExtensionAdaptor implements SessionChangedListener, SessionListener {
 
+	private static final String NAME = "ExtensionCompare";
+	
 	private static final String CRLF = "\r\n";
 	private JMenuItem menuCompare = null;
 
     private static Logger log = Logger.getLogger(ExtensionCompare.class);
 
-	/**
-     * 
-     */
     public ExtensionCompare() {
-        super("ExtensionCompare");
+        super(NAME);
         this.setOrder(44);
 	}
 	
+    @Override
+    public String getUIName() {
+    	return Constant.messages.getString("cmp.name");
+    }
+    
 	@SuppressWarnings("deprecation")
 	@Override
 	public void hook(ExtensionHook extensionHook) {
@@ -139,7 +142,12 @@ public class ExtensionCompare extends ExtensionAdaptor implements SessionChanged
     	}
 
         List<Integer> hIds = th.getHistoryIdsOfHistType(
-                rh.getSessionId(), HistoryReference.TYPE_PROXIED, HistoryReference.TYPE_ZAP_USER);
+                rh.getSessionId(),
+                HistoryReference.TYPE_PROXIED,
+                HistoryReference.TYPE_ZAP_USER,
+                HistoryReference.TYPE_SPIDER,
+                HistoryReference.TYPE_SPIDER_AJAX);
+
     	for (Integer hId : hIds) {
     		RecordHistory recH = th.read(hId);
     		URI uri = recH.getHttpMessage().getRequestHeader().getURI();
@@ -194,7 +202,8 @@ public class ExtensionCompare extends ExtensionAdaptor implements SessionChanged
 	    		cmpModel.openSession(file, this);
 
 	    		// TODO support other implementations in the future
-				Database db = new ParosDatabase();
+				ParosDatabase db = new ParosDatabase();
+				db.setDatabaseParam(new DatabaseParam());
 				db.open(file.getAbsolutePath());
 				
 				Map <String, String> curMap = new HashMap<>();
@@ -285,8 +294,7 @@ public class ExtensionCompare extends ExtensionAdaptor implements SessionChanged
 						} catch (Exception e) {
 				        	log.error(e.getMessage(), e);
 							View.getSingleton().showMessageDialog(
-									MessageFormat.format(Constant.messages.getString("report.complete.warning"),
-											new Object[] {outputFile.getAbsolutePath()}));
+									Constant.messages.getString("report.complete.warning", outputFile.getAbsolutePath()));
 						}
 
 				    } catch (Exception e1) {

@@ -45,6 +45,7 @@ import org.zaproxy.zap.model.ScanListenner2;
 import org.zaproxy.zap.model.Target;
 import org.zaproxy.zap.spider.SpiderListener;
 import org.zaproxy.zap.spider.SpiderParam;
+import org.zaproxy.zap.spider.SpiderTaskResult;
 import org.zaproxy.zap.spider.filters.FetchFilter;
 import org.zaproxy.zap.spider.filters.FetchFilter.FetchStatus;
 import org.zaproxy.zap.spider.filters.ParseFilter;
@@ -87,6 +88,8 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
 
 	private List<SpiderResource> resourcesFound;
 
+	private List<SpiderResource> resourcesIoErrors;
+
 	private Set<String> foundURIsOutOfScope;
 
 	private SpiderThread spiderThread = null;
@@ -96,6 +99,8 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
 	private int progress;
 	
 	private ScanListenner2 listener = null;
+
+	private volatile boolean cleared;
 
 	/**
 	 * The table model of the messages sent.
@@ -107,18 +112,49 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
 	 */
 	private SpiderMessagesTableModel messagesTableModel;
 
+	/**
+	 * Constructs a {@code SpiderScan} with the given data.
+	 *
+	 * @param extension the extension to obtain configurations and notify the view
+	 * @param spiderParams the spider options
+	 * @param target the spider target
+	 * @param spiderURI the starting URI, may be {@code null}.
+	 * @param scanUser the user to be used in the scan, may be {@code null}.
+	 * @param scanId the ID of the scan
+	 * @deprecated (2.6.0) Use {@link #SpiderScan(ExtensionSpider, SpiderParam, Target, URI, User, int, String)}
+	 *             instead.
+	 */
+	@Deprecated
 	public SpiderScan(ExtensionSpider extension, SpiderParam spiderParams, Target target, URI spiderURI, User scanUser, int scanId) {
+		this(extension, spiderParams, target, spiderURI, scanUser, scanId, "SpiderScan" + scanId);
+	}
+
+	/**
+	 * Constructs a {@code SpiderScan} with the given data.
+	 *
+	 * @param extension the extension to obtain configurations and notify the view
+	 * @param spiderParams the spider options
+	 * @param target the spider target
+	 * @param spiderURI the starting URI, may be {@code null}.
+	 * @param scanUser the user to be used in the scan, may be {@code null}.
+	 * @param scanId the ID of the scan
+	 * @param name the name that identifies the target
+	 * @since 2.6.0
+	 */
+	public SpiderScan(ExtensionSpider extension, SpiderParam spiderParams, Target target, URI spiderURI, User scanUser, int scanId, String name) {
 		lock = new ReentrantLock();
 		this.scanId = scanId;
+		setDisplayName(name);
 
 		numberOfURIsFound = new AtomicInteger();
 		foundURIs = Collections.synchronizedSet(new HashSet<String>());
 		resourcesFound = Collections.synchronizedList(new ArrayList<SpiderResource>());
+		resourcesIoErrors = Collections.synchronizedList(new ArrayList<SpiderResource>());
 		foundURIsOutOfScope = Collections.synchronizedSet(new HashSet<String>());
 
 		state = State.NOT_STARTED;
 
-		spiderThread = new SpiderThread(extension, spiderParams, "SpiderApi-" + scanId, this);
+		spiderThread = new SpiderThread(Integer.toString(scanId), extension, spiderParams, name, this);
 
 		spiderThread.setStartURI(spiderURI);
 		spiderThread.setStartNode(target.getStartNode());
@@ -265,6 +301,20 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
 	public List<SpiderResource> getResourcesFound() {
 		return resourcesFound;
 	}
+	
+	/**
+	 * Returns the resources found during the scan that were not successfully obtained because of I/O errors.
+	 * <p>
+	 * <strong>Note:</strong> Iterations must be {@code synchronized} on returned object. Failing to do so might result in
+	 * {@code ConcurrentModificationException}.
+	 * </p>
+	 *
+	 * @return the resources found during the scan that were not successfully obtained
+	 * @since 2.6.0
+	 */
+	public List<SpiderResource> getResourcesIoErrors() {
+		return resourcesIoErrors;
+	}
 
 	/**
 	 * Returns the URLs, out of scope, found during the scan.
@@ -281,27 +331,43 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
 	}
 
 	@Override
-	public void readURI(HttpMessage msg) {
+	public void notifySpiderTaskResult(SpiderTaskResult spiderTaskResult) {
+		HttpMessage msg = spiderTaskResult.getHttpMessage();
 		HttpRequestHeader requestHeader = msg.getRequestHeader();
 		HttpResponseHeader responseHeader = msg.getResponseHeader();
-		resourcesFound.add(new SpiderResource(
+		SpiderResource resource = new SpiderResource(
 				msg.getHistoryRef().getHistoryId(),
 				requestHeader.getMethod(),
 				requestHeader.getURI().toString(),
 				responseHeader.getStatusCode(),
-				responseHeader.getReasonPhrase()));
+				responseHeader.getReasonPhrase(),
+				spiderTaskResult.isProcessed(),
+				spiderTaskResult.getReasonNotProcessed());
+
+		if (msg.isResponseFromTargetHost()) {
+			resourcesFound.add(resource);
+		} else {
+			resourcesIoErrors.add(resource);
+		}
 
 		if (View.isInitialised()) {
-			addMessageToMessagesTableModel(msg);
+			addMessageToMessagesTableModel(spiderTaskResult);
 		}
 	}
 
-	private void addMessageToMessagesTableModel(final HttpMessage msg) {
-		if (EventQueue.isDispatchThread()) {
+	private void addMessageToMessagesTableModel(final SpiderTaskResult spiderTaskResult) {
+		if (EventQueue.isDispatchThread() || cleared) {
+			if (cleared) {
+				return;
+			}
+
 			if (messagesTableModel == null) {
 				messagesTableModel = new SpiderMessagesTableModel();
 			}
-			messagesTableModel.addHistoryReference(msg.getHistoryRef());
+			messagesTableModel.addHistoryReference(
+					spiderTaskResult.getHttpMessage().getHistoryRef(),
+					spiderTaskResult.isProcessed(),
+					spiderTaskResult.getReasonNotProcessed());
 			return;
 		}
 
@@ -309,7 +375,7 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
 
 			@Override
 			public void run() {
-				addMessageToMessagesTableModel(msg);
+				addMessageToMessagesTableModel(spiderTaskResult);
 			}
 		});
 	}
@@ -385,6 +451,10 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
 		return numberOfURIsFound.get();
 	}
 
+    public int getNumberOfNodesAdded() {
+        return this.spiderThread.getNumberOfNodesAdded();
+    }
+
 	@Override
 	public boolean isPaused() {
 		return this.spiderThread.isPaused();
@@ -407,6 +477,10 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
 	public TableModel getResultsTableModel() {
 		return this.spiderThread.getResultsTableModel();
 	}
+
+    public SpiderPanelTableModel getAddedNodesTableModel() {
+        return this.spiderThread.getAddedNodesTableModel();
+    }
 
 	/**
 	 * Gets the {@code TableModel} of the messages sent during the spidering process.
@@ -444,6 +518,7 @@ public class SpiderScan implements ScanListenner, SpiderListener, GenericScanner
 	 * @see #getMessagesTableModel()
 	 */
 	void clear() {
+		cleared = true;
 		if (messagesTableModel != null) {
 			messagesTableModel.clear();
 			messagesTableModel = null;

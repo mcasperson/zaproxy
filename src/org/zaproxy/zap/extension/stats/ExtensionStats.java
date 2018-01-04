@@ -31,7 +31,6 @@ import org.parosproxy.paros.extension.ExtensionAdaptor;
 import org.parosproxy.paros.extension.ExtensionHook;
 import org.parosproxy.paros.extension.OptionsChangedListener;
 import org.parosproxy.paros.model.OptionsParam;
-import org.zaproxy.zap.extension.api.API;
 import org.zaproxy.zap.utils.Stats;
 
 public class ExtensionStats extends ExtensionAdaptor implements OptionsChangedListener {
@@ -41,7 +40,6 @@ public class ExtensionStats extends ExtensionAdaptor implements OptionsChangedLi
 	private InMemoryStats inMemStats;
 	private Statsd statsd;
 	private OptionsStatsPanel optionsStatsPanel;
-	private StatsAPI statsAPI;
 	private StatsParam statsParam;
 
     private static final Logger LOG = Logger.getLogger(ExtensionStats.class);
@@ -53,9 +51,13 @@ public class ExtensionStats extends ExtensionAdaptor implements OptionsChangedLi
 
 	private void initialize() {
         this.setName(NAME);
-    	statsAPI = new StatsAPI(this);
 	}
 
+	@Override
+	public String getUIName() {
+		return Constant.messages.getString("stats.name");
+	}
+	
 	@Override
 	public void hook(ExtensionHook extensionHook) {
 	    super.hook(extensionHook);
@@ -67,7 +69,8 @@ public class ExtensionStats extends ExtensionAdaptor implements OptionsChangedLi
 	        extensionHook.getHookView().addOptionPanel(getOptionsStatsPanel());
 	    }
 	    
-	    API.getInstance().registerApiImplementor(statsAPI);
+	    StatsAPI statsAPI = new StatsAPI(this);
+	    extensionHook.addApiImplementor(statsAPI);
 	    statsAPI.addApiOptions(getStatsParam());
 
 	}

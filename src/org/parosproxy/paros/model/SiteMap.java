@@ -49,11 +49,18 @@
 // ZAP: 2015/11/09 Fix NullPointerException when creating a HistoryReference with a request URI without path
 // ZAP: 2016/04/21 Issue 2342: Checks non-empty method for deletion of SiteNodes via API 
 // ZAP: 2016/04/28 Issue 1171: Raise site and node add or remove events
+// ZAP: 2016/07/07 Do not add the message to past history if it already belongs to the node
+// ZAP: 2017/01/23: Issue 1800: Alpha sort the site tree
+// ZAP: 2017/06/29: Issue 3714: Added newOnly option to addPath
+// ZAP: 2017/07/09: Issue 3727: Sorting of SiteMap should not include HTTP method (verb) in the node's name
+// ZAP: 2017/11/22 Expose method to create temporary nodes (Issue 4065).
+// ZAP: 2017/12/26 Remove redundant request header null checks.
 
 package org.parosproxy.paros.model;
 
 import java.awt.EventQueue;
 import java.security.InvalidParameterException;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -83,7 +90,7 @@ import org.zaproxy.zap.eventBus.Event;
 import org.zaproxy.zap.model.Target;
 import org.zaproxy.zap.view.SiteTreeFilter;
 
-public class SiteMap extends DefaultTreeModel {
+public class SiteMap extends SortedTreeModel {
 
 	private static final long serialVersionUID = 2311091007687218751L;
 	
@@ -178,7 +185,7 @@ public class SiteMap extends DefaultTreeModel {
     	if (Constant.isLowMemoryOptionSet()) {
     		throw new InvalidParameterException("SiteMap should not be accessed when the low memory option is set");
     	}
-    	if (msg == null || msg.getRequestHeader() == null) {
+    	if (msg == null) {
     		return null;
     	}
         SiteNode resultNode = null;
@@ -279,7 +286,7 @@ public class SiteMap extends DefaultTreeModel {
      * Find the closest parent for the message - no new nodes will be created
      */
     public synchronized SiteNode findClosestParent(HttpMessage msg) {
-    	if (msg == null || msg.getRequestHeader() == null) {
+    	if (msg == null) {
     		return null;
     	}
     	return this.findClosestParent(msg.getRequestHeader().getURI());
@@ -356,10 +363,24 @@ public class SiteMap extends DefaultTreeModel {
      * This method saves the msg to be read from the reference table.  Use 
      * this method if the HttpMessage is known.
      * Note that this method must only be called on the EventDispatchThread
-     * @param msg
-     * @return 
+     * @param msg the HttpMessage
+     * @return the SiteNode that corresponds to the HttpMessage
      */
     public SiteNode addPath(HistoryReference ref, HttpMessage msg) {
+        return this.addPath(ref, msg, false);
+    }
+
+    /**
+     * Add the HistoryReference with the corresponding HttpMessage into the SiteMap.
+     * This method saves the msg to be read from the reference table.  Use 
+     * this method if the HttpMessage is known.
+     * Note that this method must only be called on the EventDispatchThread
+     * @param msg the HttpMessage
+     * @param newOnly   Only return a SiteNode if one was newly created
+     * @return the SiteNode that corresponds to the HttpMessage, or null if newOnly and the node already exists
+     * @since 2.7.0
+     */
+    public SiteNode addPath(HistoryReference ref, HttpMessage msg, boolean newOnly) {
     	if (Constant.isLowMemoryOptionSet()) {
     		throw new InvalidParameterException("SiteMap should not be accessed when the low memory option is set");
     	}
@@ -376,6 +397,7 @@ public class SiteMap extends DefaultTreeModel {
         SiteNode parent = (SiteNode) getRoot();
         SiteNode leaf = null;
         String folder = "";
+        boolean isNew = false;
         
         try {
             
@@ -388,6 +410,11 @@ public class SiteMap extends DefaultTreeModel {
             for (int i=0; i < path.size(); i++) {
             	folder = path.get(i);
                 if (folder != null && !folder.equals("")) {
+                    if (newOnly) {
+                        // Check to see if it already exists
+                        String leafName = getLeafName(folder, msg);
+                        isNew = (findChild(parent, leafName) == null);
+                    }
                     if (i == path.size()-1) {
                         leaf = findAndAddLeaf(parent, folder, ref, msg);
                         ref.setSiteNode(leaf);
@@ -412,7 +439,10 @@ public class SiteMap extends DefaultTreeModel {
             hrefMap.put(ref.getHistoryId(), leaf);
         }
 
-        return leaf;
+        if (! newOnly || isNew) {
+            return leaf;
+        }
+        return null;
     }
     
     private SiteNode findAndAddChild(SiteNode parent, String nodeName, HistoryReference baseRef, HttpMessage baseMsg) throws URIException, HttpMalformedHeaderException, NullPointerException, DatabaseException {
@@ -506,7 +536,7 @@ public class SiteMap extends DefaultTreeModel {
             this.applyFilter(node);
 
             handleEvent(parent, node, EventType.ADD);            
-        } else {
+        } else if (hrefMap.get(ref.getHistoryId()) != node) {
            
             // do not replace if
             // - use local copy (304). only use if 200
@@ -603,7 +633,7 @@ public class SiteMap extends DefaultTreeModel {
         return result;
     }
     
-    private HistoryReference createReference(SiteNode node, HistoryReference baseRef, HttpMessage base) throws HttpMalformedHeaderException, DatabaseException, URIException, NullPointerException {
+    public HistoryReference createReference(SiteNode node, HistoryReference baseRef, HttpMessage base) throws HttpMalformedHeaderException, DatabaseException, URIException, NullPointerException {
         TreeNode[] path = node.getPath();
         StringBuilder sb = new StringBuilder();
         String nodeName;
@@ -789,5 +819,78 @@ public class SiteMap extends DefaultTreeModel {
 	 */
 	private static void publishEvent(String event, SiteNode node) {
 		ZAP.getEventBus().publishSyncEvent(SiteMapEventPublisher.getPublisher(), new Event(SiteMapEventPublisher.getPublisher(), event, new Target(node)));
+	}
+}
+
+/**
+ * Based on example code from:
+ * <a href="http://www.java2s.com/Code/Java/Swing-JFC/AtreemodelusingtheSortTreeModelwithaFilehierarchyasinput.htm">Sorted Tree Example</a>
+ */
+class SortedTreeModel extends DefaultTreeModel {
+
+	private static final long serialVersionUID = 4130060741120936997L;
+	private Comparator<SiteNode> comparator;
+
+	public SortedTreeModel(TreeNode node, SiteNodeStringComparator siteNodeStringComparator) {
+		super(node);
+		this.comparator = siteNodeStringComparator;
+	}
+
+	public SortedTreeModel(TreeNode node) {
+		super(node);
+		this.comparator = new SiteNodeStringComparator();
+	}
+	
+	public SortedTreeModel(TreeNode node, boolean asksAllowsChildren, Comparator<SiteNode> aComparator) {
+		super(node, asksAllowsChildren);
+		this.comparator = aComparator;
+	}
+
+	public void insertNodeInto(SiteNode child, SiteNode parent) {
+		int index = findIndexFor(child, parent);
+		super.insertNodeInto(child, parent, index);
+	}
+
+	public void insertNodeInto(SiteNode child, SiteNode parent, int i) {
+		// The index is useless in this model, so just ignore it.
+		insertNodeInto(child, parent);
+	}
+
+	private int findIndexFor(SiteNode child, SiteNode parent) {
+		int childCount = parent.getChildCount();
+		if (childCount == 0) {
+			return 0;
+		}
+		if (childCount == 1) {
+			return comparator.compare(child, (SiteNode) parent.getChildAt(0)) <= 0 ? 0 : 1;
+		}
+		return findIndexFor(child, parent, 0, childCount - 1);
+	}
+
+	private int findIndexFor(SiteNode child, SiteNode parent, int idx1, int idx2) {
+		if (idx1 == idx2) {
+			return comparator.compare(child, (SiteNode) parent.getChildAt(idx1)) <= 0 ? idx1 : idx1 + 1;
+		}
+		int half = (idx1 + idx2) / 2;
+		if (comparator.compare(child, (SiteNode) parent.getChildAt(half)) <= 0) {
+			return findIndexFor(child, parent, idx1, half);
+		}
+		return findIndexFor(child, parent, half + 1, idx2);
+	}
+}
+
+class SiteNodeStringComparator implements Comparator<SiteNode> {
+	public int compare(SiteNode sn1, SiteNode sn2) {
+		String s1 = sn1.getName();
+		String s2 = sn2.getName();
+		int initialComparison = s1.compareToIgnoreCase(s2);
+
+		if (initialComparison == 0) {
+			s1 = sn1.getNodeName();
+			s2 = sn2.getNodeName();
+			
+			return s1.compareToIgnoreCase(s2);
+		}
+		return initialComparison;
 	}
 }

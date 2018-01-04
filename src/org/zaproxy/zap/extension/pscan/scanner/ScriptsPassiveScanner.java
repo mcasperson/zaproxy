@@ -19,10 +19,12 @@
  */
 package org.zaproxy.zap.extension.pscan.scanner;
 
+import java.lang.reflect.UndeclaredThrowableException;
 import java.util.List;
 
 import net.htmlparser.jericho.Source;
 
+import org.apache.log4j.Logger;
 import org.parosproxy.paros.Constant;
 import org.parosproxy.paros.control.Control;
 import org.parosproxy.paros.core.scanner.Alert;
@@ -36,32 +38,26 @@ import org.zaproxy.zap.extension.script.ScriptWrapper;
 
 public class ScriptsPassiveScanner extends PluginPassiveScanner {
 	
+	private static final Logger logger = Logger.getLogger(ScriptsPassiveScanner.class);
+
 	private ExtensionScript extension = null;
 	private PassiveScanThread parent = null;
-	private String name = null;
 	
-	// private Logger logger = Logger.getLogger(ScriptsPassiveScanner.class);
 
 	private int currentHRefId;
+	private int currentHistoryType;
 
 	public ScriptsPassiveScanner() {
 	}
 	
 	@Override
 	public String getName() {
-		if (name == null) {
-			// Cache to prevent an NPE when unloaded
-	    	if (Constant.messages.containsKey("pscan.scripts.passivescanner.title")) {
-	    		name = Constant.messages.getString("pscan.scripts.passivescanner.title");
-	    	}
-	    	name = "Script passive scan rules";
-		}
-		return name;
+		return Constant.messages.getString("pscan.scripts.passivescanner.title");
 	}
 
 	private ExtensionScript getExtension() {
 		if (extension == null) {
-			extension = (ExtensionScript) Control.getSingleton().getExtensionLoader().getExtension(ExtensionScript.NAME);
+			extension = Control.getSingleton().getExtensionLoader().getExtension(ExtensionScript.class);
 		}
 		return extension;
 	}
@@ -87,7 +83,9 @@ public class ScriptsPassiveScanner extends PluginPassiveScanner {
 						PassiveScript s = extension.getInterface(script, PassiveScript.class);
 						
 						if (s != null) {
-							s.scan(this, msg, source);
+							if (appliesToCurrentHistoryType(script, s)) {
+								s.scan(this, msg, source);
+							}
 							
 						} else {
 							extension.handleFailedScriptInterface(
@@ -103,6 +101,24 @@ public class ScriptsPassiveScanner extends PluginPassiveScanner {
 		}
 		
 	}
+
+	private boolean appliesToCurrentHistoryType(ScriptWrapper wrapper, PassiveScript ps) {
+		try {
+			return ps.appliesToHistoryType(currentHistoryType);
+		} catch (UndeclaredThrowableException e) {
+			// Python script implementation throws an exception if this optional/default method is not
+			// actually implemented by the script (other script implementations, Zest/ECMAScript, just
+			// use the default method).
+			if (e.getCause() instanceof NoSuchMethodException && "appliesToHistoryType".equals(e.getCause().getMessage())) {
+				if (logger.isDebugEnabled()) {
+					logger.debug("Script [Name=" + wrapper.getName() + ", Engine=" + wrapper.getEngineName()
+									+ "]  does not implement the optional method appliesToHistoryType: ", e);
+				}
+				return true;
+			}
+			throw e;
+		}
+	}
 	
 	public void raiseAlert(int risk, int confidence, String name, String description, String uri, 
 			String param, String attack, String otherInfo, String solution, String evidence, 
@@ -115,10 +131,19 @@ public class ScriptsPassiveScanner extends PluginPassiveScanner {
 
 		this.parent.raiseAlert(currentHRefId, alert);
 	}
+	
+	public void addTag(String tag) {		
+		this.parent.addTag(currentHRefId, tag);
+	}
 
 	@Override
 	public void setParent(PassiveScanThread parent) {
 		this.parent = parent;
 	}
 
+	@Override
+	public boolean appliesToHistoryType(int historyType) {
+		this.currentHistoryType = historyType;
+		return true;
+	}
 }

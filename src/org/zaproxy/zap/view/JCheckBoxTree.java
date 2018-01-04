@@ -3,8 +3,8 @@ package org.zaproxy.zap.view;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
 import java.util.EventListener;
 import java.util.EventObject;
 import java.util.HashMap;
@@ -92,8 +92,8 @@ public class JCheckBoxTree extends JTree {
     // Override
     @Override
     public void setModel(TreeModel newModel) {
+        resetCheckingState(newModel != null ? (DefaultMutableTreeNode) newModel.getRoot() : null);
         super.setModel(newModel);
-        resetCheckingState();
     }
 
     // New method that returns only the checked paths (totally ignores original "selection" mechanism)
@@ -112,14 +112,13 @@ public class JCheckBoxTree extends JTree {
         return cn.isSelected && cn.hasChildren && !cn.allChildrenSelected;
     }
 
-    private void resetCheckingState() { 
+    private void resetCheckingState(DefaultMutableTreeNode rootNode) { 
         nodesCheckingState = new HashMap<TreePath, CheckedNode>();
         checkedPaths = new HashSet<TreePath>();
-        DefaultMutableTreeNode node = (DefaultMutableTreeNode)getModel().getRoot();
-        if (node == null) {
+        if (rootNode == null) {
             return;
         }
-        addSubtreeToCheckingStateTracking(node);
+        addSubtreeToCheckingStateTracking(rootNode);
     }
 
     // Creating data structure of the current model for the checking mechanism
@@ -156,18 +155,18 @@ public class JCheckBoxTree extends JTree {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode)value;
             Object obj = node.getUserObject();          
             TreePath tp = new TreePath(node.getPath());
+            altLabel.setText(obj != null ? obj.toString() : "");
+            altLabel.setForeground(UIManager.getColor(selected ? "Tree.selectionForeground" : "Tree.textForeground"));
             CheckedNode cn = nodesCheckingState.get(tp);
             if (cn == null) {
+                checkBox.setVisible(false);
                 return this;
             }
-            String textRepresentation = obj != null ? obj.toString() : "";
             if (cn.isCheckBoxEnabled) {
 	            checkBox.setSelected(cn.isSelected);
 	            checkBox.setOpaque(cn.isSelected && cn.hasChildren && ! cn.allChildrenSelected);
 	        	checkBox.setVisible(true);
 	        	checkBox.setEnabled(true);
-	        	// TODO nasty hack to prevent top level node text being truncated - need a better fix for this :/
-	        	textRepresentation += "          ";
 	        	/* Looks ok, but doesnt work correctly
 	            if (cn.isSelected && cn.hasChildren && ! cn.allChildrenSelected) {
 	                checkBox.getModel().setPressed(true);
@@ -181,8 +180,6 @@ public class JCheckBoxTree extends JTree {
             	checkBox.setVisible(false);
             	checkBox.setEnabled(false);
             }
-            altLabel.setText(textRepresentation);
-            altLabel.setForeground(UIManager.getColor(selected ? "Tree.selectionForeground" : "Tree.textForeground"));
 
             return this;
         }       
@@ -214,7 +211,7 @@ public class JCheckBoxTree extends JTree {
             }
         };
         // Calling checking mechanism on mouse click
-        this.addMouseListener(new MouseListener() {
+        this.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent arg0) {
                 TreePath tp = JCheckBoxTree.this.getPathForLocation(arg0.getX(), arg0.getY());
@@ -231,18 +228,6 @@ public class JCheckBoxTree extends JTree {
                 fireCheckChangeEvent(new CheckChangeEvent(new Object()));
                 // Repainting tree after the data structures were updated
                 JCheckBoxTree.this.repaint();                          
-            }           
-            @Override
-            public void mouseEntered(MouseEvent arg0) {         
-            }           
-            @Override
-            public void mouseExited(MouseEvent arg0) {              
-            }
-            @Override
-            public void mousePressed(MouseEvent arg0) {             
-            }
-            @Override
-            public void mouseReleased(MouseEvent arg0) {
             }           
         });
         this.setSelectionModel(dtsm);

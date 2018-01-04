@@ -39,18 +39,17 @@ import org.zaproxy.zap.view.ZapMenuItem;
  */
 public class ExtensionLog4j extends ExtensionAdaptor {
 
+	private static final String NAME = "ExtensionLog4j";
+	
     private ZapMenuItem menuGarbageCollect = null;
 
 	private ScanStatus scanStatus;
 	
-    /**
-     * 
-     */
     public ExtensionLog4j() {
-        super("ExtensionLog4j");
+        super(NAME);
         this.setOrder(56);
 
-		if (Constant.isDevBuild()) {
+		if (Constant.isDevBuild() && View.isInitialised()) {
 			// Only enable if this is a developer build, ie build from source
         
 	        scanStatus = new ScanStatus(
@@ -60,12 +59,15 @@ public class ExtensionLog4j extends ExtensionAdaptor {
 	
 	        Logger.getRootLogger().addAppender(new ZapOutputWriter(scanStatus));
 	
-			if (View.isInitialised()) {
-				View.getSingleton().getMainFrame().getMainFooterPanel().addFooterToolbarRightLabel(scanStatus.getCountLabel());
-			}
+			View.getSingleton().getMainFrame().getMainFooterPanel().addFooterToolbarRightLabel(scanStatus.getCountLabel());
 		}
 	}
 	
+    @Override
+    public String getUIName() {
+    	return Constant.messages.getString("log4j.name");
+    }
+    
 	@Override
 	public void hook(ExtensionHook extensionHook) {
 	    super.hook(extensionHook);

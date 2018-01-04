@@ -25,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class PhpAPIGenerator extends AbstractAPIGenerator {
@@ -60,6 +61,7 @@ public class PhpAPIGenerator extends AbstractAPIGenerator {
         Map<String, String> initMap = new HashMap<>();
         initMap.put("Break", "Brk");
         initMap.put("break", "brk");
+        initMap.put("continue", "cont");
         nameMap = Collections.unmodifiableMap(initMap);
     }
 
@@ -69,6 +71,18 @@ public class PhpAPIGenerator extends AbstractAPIGenerator {
 
     public PhpAPIGenerator(String path, boolean optional) {
     	super(path, optional);
+    }
+
+    /**
+     * Generates the API client files of the given API implementors.
+     *
+     * @param implementors the implementors
+     * @throws IOException if an error occurred while generating the APIs.
+     * @deprecated (2.6.0) Use {@link #generateAPIFiles(List)} instead.
+     */
+    @Deprecated
+    public void generatePhpFiles(List<ApiImplementor> implementors) throws IOException {
+        this.generateAPIFiles(implementors);
     }
 
 	private void generatePhpElement(ApiElement element, String component, 
@@ -109,7 +123,7 @@ public class PhpAPIGenerator extends AbstractAPIGenerator {
 		String paramMan = "";
 		if (element.getMandatoryParamNames() != null) {
 			for (String param : element.getMandatoryParamNames()) {
-			    if (paramMan != "") {
+			    if (!paramMan.isEmpty()) {
 			        paramMan += ", ";
 			    }
 				paramMan += "$" + param.toLowerCase();
@@ -119,7 +133,7 @@ public class PhpAPIGenerator extends AbstractAPIGenerator {
 		String paramOpt = "";
 		if (element.getOptionalParamNames() != null) {
 			for (String param : element.getOptionalParamNames()) {
-			    if (paramMan != "" || paramOpt != "") {
+			    if (!paramMan.isEmpty() || !paramOpt.isEmpty()) {
 			        paramOpt += ", ";
 			    }
 				paramOpt += "$" + param.toLowerCase() + "=NULL";

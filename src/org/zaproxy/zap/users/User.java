@@ -226,7 +226,7 @@ public class User extends Enableable {
 	/**
 	 * Gets the last successful auth time.
 	 * 
-	 * @param lastSuccessfulAuthTime the new last successful auth time
+	 * @return the time of last successful authentication
 	 */
 	protected long getLastSuccessfulAuthTime() {
 		return lastSuccessfulAuthTime;
@@ -268,8 +268,7 @@ public class User extends Enableable {
 	 */
 	private static ExtensionAuthentication getAuthenticationExtension() {
 		if (extensionAuth == null) {
-			extensionAuth = (ExtensionAuthentication) Control.getSingleton().getExtensionLoader()
-					.getExtension(ExtensionAuthentication.NAME);
+			extensionAuth = Control.getSingleton().getExtensionLoader().getExtension(ExtensionAuthentication.class);
 		}
 		return extensionAuth;
 	}
@@ -297,6 +296,7 @@ public class User extends Enableable {
 	 * Decodes an User from an encoded string. The string provided as input should have been
 	 * obtained through calls to {@link #encode(User)}.
 	 * 
+	 * @param contextId the ID of the context the user belongs to
 	 * @param encodedString the encoded string
 	 * @return the user
 	 */
@@ -306,8 +306,9 @@ public class User extends Enableable {
 	}
 
 	/**
-	 * Helper method for decoding an user from an encoded string. See {@link #decode(String)}.
+	 * Helper method for decoding an user from an encoded string. See {@link #decode(int, String)}.
 	 * 
+	 * @param contextId the ID of the context the user belongs to
 	 * @param encodedString the encoded string
 	 * @param authenticationExtension the authentication extension
 	 * @return the user

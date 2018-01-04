@@ -44,9 +44,6 @@ public class UninstalledAddOnsTableModel extends AddOnsTableModel {
     
 	private static final int COLUMN_COUNT = COLUMN_NAMES.length;
 
-    /**
-     * 
-     */
     public UninstalledAddOnsTableModel(AddOnCollection installedAddOns) {
         super(installedAddOns, 4);
     }
@@ -101,7 +98,7 @@ public class UninstalledAddOnsTableModel extends AddOnsTableModel {
         		return Constant.messages.getString("cfu.table.label.new");
         	} else {
         		// TODO change to date ??
-        		return getAddOnWrapper(rowIndex).getAddOn().getFileVersion();
+        		return getAddOnWrapper(rowIndex).getAddOn().getVersion();
         	}
         case 5:
             return getAddOnWrapper(rowIndex).isEnabled();

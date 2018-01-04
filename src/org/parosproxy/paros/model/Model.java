@@ -39,6 +39,8 @@
 // ZAP: 2016/03/22 Allow to remove ContextDataFactory
 // ZAP: 2016/03/23 Issue 2331: Custom Context Panels not show in existing contexts after installation of add-on
 // ZAP: 2016/06/10 Do not clean up the database if the current session does not require it
+// ZAP: 2016/07/05 Issue 2218: Persisted Sessions don't save unconfigured Default Context
+// ZAP: 2017/06/07 Allow to persist the session properties (e.g. name, description).
 
 package org.parosproxy.paros.model;
 
@@ -125,6 +127,8 @@ public class Model {
 	 */
 	public Session newSession() {
 		session = new Session(this);
+		// Always start with one context
+		session.saveContext(session.getNewContext(Constant.messages.getString("context.default.name")));
 		return session;
 	}
 
@@ -158,6 +162,18 @@ public class Model {
 	 */
 	public void saveSession(String fileName) throws Exception {
 		getSession().save(fileName);
+	}
+
+	/**
+	 * Persists the properties (e.g. name, description) of the current session.
+	 * <p>
+	 * Should be called only by "core" classes.
+	 *
+	 * @throws Exception if an error occurred while persisting the properties.
+	 * @since 2.7.0
+	 */
+	public void persistSessionProperties() throws Exception {
+		getSession().persistProperties();
 	}
 
 	/**

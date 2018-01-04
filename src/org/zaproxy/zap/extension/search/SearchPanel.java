@@ -48,6 +48,7 @@ import org.parosproxy.paros.view.View;
 import org.zaproxy.zap.extension.httppanel.HttpPanelRequest;
 import org.zaproxy.zap.extension.httppanel.HttpPanelResponse;
 import org.zaproxy.zap.utils.DisplayUtils;
+import org.zaproxy.zap.utils.TableExportButton;
 import org.zaproxy.zap.utils.ZapTextField;
 import org.zaproxy.zap.view.ZapToggleButton;
 
@@ -84,6 +85,7 @@ public class SearchPanel extends AbstractPanel implements SearchListenner {
 	private JCheckBox chkInverse = null;
 	private JLabel numberOfMatchesLabel;
 	private JButton optionsButton;
+	private TableExportButton<SearchResultsTable> exportButton = null;
 	
 	private MessageFormat numberOfMatchesFormat;
 
@@ -92,7 +94,6 @@ public class SearchPanel extends AbstractPanel implements SearchListenner {
 
 	private final ViewDelegate view;
 
-    //private static Logger log = Logger.getLogger(SearchPanel.class);
 
     /**
      * @deprecated (2.5.0) Use {@link #SearchPanel(ViewDelegate)} instead.
@@ -156,7 +157,6 @@ public class SearchPanel extends AbstractPanel implements SearchListenner {
 	 * 	
 	 * @return javax.swing.JPanel	
 	 */    
-	/**/
 	private javax.swing.JPanel getPanelCommand() {
 		if (panelCommand == null) {
 
@@ -188,7 +188,6 @@ public class SearchPanel extends AbstractPanel implements SearchListenner {
 		}
 		return panelCommand;
 	}
-	/**/
 
 	private GridBagConstraints newGBC (int gridx) {
 		GridBagConstraints gridBagConstraints = new GridBagConstraints();
@@ -240,6 +239,7 @@ public class SearchPanel extends AbstractPanel implements SearchListenner {
 			panelToolbar.add(new JToolBar.Separator(), newGBC(8));
 			panelToolbar.add(getNumberOfMatchesLabel(), newGBC(9));
 			panelToolbar.add(t1, gridBagConstraintsX);
+			panelToolbar.add(getExportButton(), newGBC(10));
 			panelToolbar.add(getOptionsButton(), optionsGridBag);
 		}
 		return panelToolbar;
@@ -336,10 +336,10 @@ public class SearchPanel extends AbstractPanel implements SearchListenner {
 			regEx = new ZapTextField();
 			regEx.setHorizontalAlignment(ZapTextField.LEFT);
 			regEx.setAlignmentX(0.0F);
-			regEx.setPreferredSize(new java.awt.Dimension(250,25));
+			regEx.setPreferredSize(DisplayUtils.getScaledDimension(250,25));
 			regEx.setText("");
 			regEx.setToolTipText(Constant.messages.getString("search.toolbar.tooltip.regex"));
-			regEx.setMinimumSize(new java.awt.Dimension(250,25));
+			regEx.setMinimumSize(DisplayUtils.getScaledDimension(250,25));
 			
 			regEx.addActionListener(new java.awt.event.ActionListener() { 
 
@@ -366,11 +366,18 @@ public class SearchPanel extends AbstractPanel implements SearchListenner {
 		numberOfMatchesLabel.setText(numberOfMatchesFormat.format(new Object[] { Integer.valueOf(numberOfMatches) }));
 	}
 
+	private TableExportButton<SearchResultsTable> getExportButton() {
+		if (exportButton == null) {
+			exportButton = new TableExportButton<>(resultsTable);
+		}
+		return exportButton;
+	}
+
 	private JButton getOptionsButton() {
 		if (optionsButton == null) {
 			optionsButton = new JButton();
 			optionsButton.setToolTipText(Constant.messages.getString("search.toolbar.button.options"));
-			optionsButton.setIcon(new ImageIcon(SearchPanel.class.getResource("/resource/icon/16/041.png")));
+			optionsButton.setIcon(DisplayUtils.getScaledIcon(new ImageIcon(SearchPanel.class.getResource("/resource/icon/16/041.png"))));
 			optionsButton.addActionListener(new ActionListener() {
 
 				@Override

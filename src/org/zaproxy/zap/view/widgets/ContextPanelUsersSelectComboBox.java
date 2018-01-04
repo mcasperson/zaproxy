@@ -13,6 +13,8 @@ import org.zaproxy.zap.view.renderer.UserListCellRenderer;
  * currently being edited in Users Context Panel. This class should be used when displaying a
  * combo-box for selecting a user in a Context Panel, as it uses the right list of Users: the latest
  * list of Users as being defined in the Users Panel.
+ * 
+ * @see #unload()
  */
 public class ContextPanelUsersSelectComboBox extends JComboBox<User> {
 
@@ -30,6 +32,8 @@ public class ContextPanelUsersSelectComboBox extends JComboBox<User> {
 		}
 	}
 
+	private final UsersListModel usersListModel;
+
 	/**
 	 * Instantiates a new user select combo box.
 	 * 
@@ -41,12 +45,25 @@ public class ContextPanelUsersSelectComboBox extends JComboBox<User> {
 		// Force loading the UserManagement extension to make sure it's enabled.
 		loadUsersManagementExtension();
 		UsersTableModel usersTableModel = usersExtension.getUIConfiguredUsersModel(contextId);
-		this.setModel(new UsersListModel(usersTableModel));
+		this.usersListModel = new UsersListModel(usersTableModel);
+		this.setModel(usersListModel);
 		this.setRenderer(new UserListCellRenderer());
 	}
 
 	/**
+	 * Unloads the combo box model.
+	 * <p>
+	 * This method should be called once the combo box is no longer needed, to detach it from core (persistent) classes.
+	 * 
+	 * @since 2.7.0
+	 */
+	public void unload() {
+		this.usersListModel.unload();
+	}
+
+	/**
 	 * Performs the same as {@link #getSelectedItem()}, but adds a convenience cast.
+	 * @return the selected user, or {@code null} if none 
 	 */
 	public User getSelectedUser() {
 		return (User) getSelectedItem();
@@ -55,6 +72,7 @@ public class ContextPanelUsersSelectComboBox extends JComboBox<User> {
 	/**
 	 * Allows adding 'custom' users besides the ones already loaded from the context. Can be used,
 	 * for example, to add a 'Any User' entry or 'Unauthenticated' entry.
+	 * @param customUsers the custom users, should not be {@code null}
 	 */
 	public void setCustomUsers(User[] customUsers) {
 		((UsersListModel) getModel()).setCustomUsers(customUsers);

@@ -26,6 +26,13 @@
 // ZAP: 2014/03/23 Issue 412: Enable unsafe SSL/TLS renegotiation option not saved
 // ZAP: 2014/08/14 Issue 1184: Improve support for IBM JDK
 // ZAP: 2016/06/28: File chooser for PKCS#12 files now also accepts .pfx files
+// ZAP: 2017/01/09 Remove method no longer needed.
+// ZAP: 2017/01/23 Select first alias of selected keystore
+// ZAP: 2017/08/16 Tidy up usage of CertificateView.
+// ZAP: 2017/08/16 Show error message if failed to activate the certificate.
+// ZAP: 2017/08/17 Reduce code duplication when showing cert/keystore errors
+// ZAP: 2017/12/12 Use first alias by default (Issue 3879).
+// ZAP: 2017/12/13 Do not allow to edit the name/key of active cert.
 
 package org.parosproxy.paros.extension.option;
 
@@ -47,6 +54,8 @@ import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
 import javax.swing.filechooser.FileFilter;
 
 import org.apache.log4j.Logger;
@@ -213,7 +222,12 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 			setActiveButton.addActionListener(new java.awt.event.ActionListener() {
 				@Override
 				public void actionPerformed(java.awt.event.ActionEvent evt) {
-					setActiveButtonActionPerformed(evt);
+					try {
+						setActiveButtonActionPerformed(evt);
+					} catch (ProviderException e) {
+						showKeyStoreCertError(e.toString());
+						logger.error(e.getMessage(), e);
+					}
 				}
 			});
 
@@ -241,10 +255,11 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 			});
 
 			keyStoreList.setModel(keyStoreListModel);
-			keyStoreList.addMouseListener(new java.awt.event.MouseAdapter() {
+			keyStoreList.addListSelectionListener(new ListSelectionListener() {
+
 				@Override
-				public void mouseClicked(java.awt.event.MouseEvent evt) {
-					keyStoreListMouseClicked(evt);
+				public void valueChanged(ListSelectionEvent evt) {
+					keyStoreListSelectionChanged();
 				}
 			});
 			keyStoreScrollPane.setViewportView(keyStoreList);
@@ -462,6 +477,7 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 			certificateLabel.setText(Constant.messages.getString("options.cert.label.activecerts"));
 
 			certificateTextField.setEnabled(false);
+			certificateTextField.setEditable(false);
 
 			showActiveCertificateButton.setText("->");
 			showActiveCertificateButton.setActionCommand(">");
@@ -541,18 +557,27 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 		return certificatePanel;
 	}
 
+	private static void showKeyStoreCertError(String errorMessage) {
+		showCertError("options.cert.error.accesskeystore", errorMessage);
+	}
 
-	private void keyStoreListMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_keyStoreListMouseClicked
+	private static void showCertError(String i18nKeyBaseMessage, String errorMessage) {
+		JOptionPane.showMessageDialog(
+				null,
+				new String[] { Constant.messages.getString(i18nKeyBaseMessage), errorMessage },
+				Constant.messages.getString("options.cert.error"),
+				JOptionPane.ERROR_MESSAGE);
+	}
+
+	private void keyStoreListSelectionChanged() {
 		int keystore = keyStoreList.getSelectedIndex();
 		try {
 			aliasTableModel.setKeystore(keystore);
 		} catch (Exception e) {
-			JOptionPane.showMessageDialog(null, new String[] {
-					Constant.messages.getString("options.cert.error"), e.toString()}, 
-					Constant.messages.getString("options.cert.error.accesskeystore"), JOptionPane.ERROR_MESSAGE);
+			showKeyStoreCertError(e.toString());
 			logger.error(e.getMessage(), e);
 		}
-	}//GEN-LAST:event_keyStoreListMouseClicked
+	}
 
 	private void showActiveCertificateButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_showActiveCertificateButtonActionPerformed
 		Certificate cert = contextManager.getDefaultCertificate();
@@ -615,6 +640,7 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 			retry = true;
 
 			certificatejTabbedPane.setSelectedIndex(0);
+			activateFirstOnlyAliasOfKeyStore(ksIndex);
 
 			driverComboBox.setSelectedIndex(-1);
 			pkcs11PasswordField.setText("");
@@ -626,8 +652,7 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 					//   - Missing library.
 					//   - Malformed configuration.
 					//   - ...
-					showGenericErrorMessagePkcs11CouldNotBeAdded();
-					logger.warn("Couldn't add key from "+name, e.getCause());
+					logAndShowGenericErrorMessagePkcs11CouldNotBeAdded(false, name, e);
 				} else if ("Initialization failed".equals(e.getCause().getMessage())) {
 					// The initialisation may fail because of:
 					//   - no smart card reader or smart card detected.
@@ -650,12 +675,10 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 						logger.warn("Couldn't add key from "+name, e);
 					}
 				} else {
-					showGenericErrorMessagePkcs11CouldNotBeAdded();
-					logger.warn("Couldn't add key from "+name, e);
+					logAndShowGenericErrorMessagePkcs11CouldNotBeAdded(false, name, e);
 				}
 			} else {
-				showGenericErrorMessagePkcs11CouldNotBeAdded();
-				logger.error("Couldn't add key from "+name, e);
+				logAndShowGenericErrorMessagePkcs11CouldNotBeAdded(false, name, e);
 			}
 		} catch (java.io.IOException e) {
 			if (e.getMessage().equals("load failed") && e.getCause().getClass().getName().equals("javax.security.auth.login.FailedLoginException")) {
@@ -678,19 +701,36 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 					logger.warn("PKCS#11: Incorrect PIN or password"+attempts+": "+name);
 				}
 			}else{
-				showGenericErrorMessagePkcs11CouldNotBeAdded();
-				logger.warn("Couldn't add key from "+name, e);
+				logAndShowGenericErrorMessagePkcs11CouldNotBeAdded(false, name, e);
 			}
 		} catch (KeyStoreException e) {
-			showGenericErrorMessagePkcs11CouldNotBeAdded();
-			logger.warn("Couldn't add key from "+name, e);
+			logAndShowGenericErrorMessagePkcs11CouldNotBeAdded(false, name, e);
 		} catch (Exception e) {
-			showGenericErrorMessagePkcs11CouldNotBeAdded();
-			logger.error("Couldn't add key from "+name, e);
+			logAndShowGenericErrorMessagePkcs11CouldNotBeAdded(true, name, e);
 		}
 
 
 	}//GEN-LAST:event_addPkcs11ButtonActionPerformed
+
+	private void activateFirstOnlyAliasOfKeyStore(int ksIndex) {
+		if (ksIndex < 0 || ksIndex >= keyStoreList.getModel().getSize()) {
+			return;
+		}
+
+		keyStoreList.setSelectedIndex(ksIndex);
+		if (aliasTable.getRowCount() != 0) {
+			aliasTable.setRowSelectionInterval(0, 0);
+
+			if (aliasTable.getRowCount() == 1 && !isCertActive()) {
+				setActiveAction();
+			}
+		}
+	}
+
+	private boolean isCertActive() {
+		String currentKey = contextManager.getDefaultKey();
+		return currentKey != null && !currentKey.isEmpty();
+	}
 
 	private void showErrorMessageSunPkcs11ProviderNotAvailable() {
 		final String sunReference = Constant.messages.getString("options.cert.error.pkcs11notavailable.sun.hyperlink");
@@ -718,11 +758,23 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 				Constant.messages.getString("options.cert.label.client.cert"), JOptionPane.ERROR_MESSAGE);
 	}
 
-	private void showGenericErrorMessagePkcs11CouldNotBeAdded() {
-		JOptionPane.showMessageDialog(null, new String[] {
-				Constant.messages.getString("options.cert.error"),
-				Constant.messages.getString("options.cert.error.password")}, 
-				Constant.messages.getString("options.cert.label.client.cert"), JOptionPane.ERROR_MESSAGE);
+	private void logAndShowGenericErrorMessagePkcs11CouldNotBeAdded(boolean isErrorLevel, String name, Exception e) {
+		if(pkcs11PasswordField.getPassword().length == 0) {
+			JOptionPane.showMessageDialog(null, new String[] {
+					Constant.messages.getString("options.cert.error"),
+					Constant.messages.getString("options.cert.error.password.blank")}, 
+					Constant.messages.getString("options.cert.label.client.cert"), JOptionPane.ERROR_MESSAGE);
+		} else {
+			JOptionPane.showMessageDialog(null, new String[] {
+					Constant.messages.getString("options.cert.error"),
+					Constant.messages.getString("options.cert.error.password")}, 
+					Constant.messages.getString("options.cert.label.client.cert"), JOptionPane.ERROR_MESSAGE);
+			if (isErrorLevel) {
+				logger.error("Couldn't add key from "+name, e);
+			} else {
+				logger.warn("Couldn't add key from "+name, e);
+			}
+		}
 	}
 	
 	private void driverButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_driverButtonActionPerformed
@@ -737,27 +789,23 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 		String kspass = new String(pkcs12PasswordField.getPassword());
 		if (kspass.equals("")){
 			//pcks#12 file with empty password is not supported by java
-			JOptionPane.showMessageDialog(null, new String[] {
-					Constant.messages.getString("options.cert.error.pkcs12nopass"), 
-					Constant.messages.getString("options.cert.error.usepassfile")}, 
-					Constant.messages.getString("options.cert.error"), JOptionPane.ERROR_MESSAGE);
+			showCertError("options.cert.error.pkcs12nopass", Constant.messages.getString("options.cert.error.usepassfile"));
 			return;
 		}
 
+		int ksIndex;
 		try {
-			int ksIndex = contextManager.loadPKCS12Certificate(fileTextField.getText(), kspass);
+			ksIndex = contextManager.loadPKCS12Certificate(fileTextField.getText(), kspass);
 			keyStoreListModel.insertElementAt(contextManager.getKeyStoreDescription(ksIndex), ksIndex);
 		} catch (Exception e) {
-			JOptionPane.showMessageDialog(null, new String[] {
-					Constant.messages.getString("options.cert.error.accesskeystore"), 
-					Constant.messages.getString("options.cert.error.password")}, 
-					Constant.messages.getString("options.cert.error"), JOptionPane.ERROR_MESSAGE);
+			showKeyStoreCertError(Constant.messages.getString("options.cert.error.password"));
 			logger.error(e.getMessage(), e);
 			return;
 		}
 
 
 		certificatejTabbedPane.setSelectedIndex(0);
+		activateFirstOnlyAliasOfKeyStore(ksIndex);
 
 		fileTextField.setText("");
 		pkcs12PasswordField.setText("");
@@ -805,14 +853,18 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 	 * 
 	 * @param cert
 	 */
+	@SuppressWarnings("unused")
 	private void showCertificate(Certificate cert) {
 		if (cert != null) {
-			JFrame frame = new CertificateView(cert.toString());
-			frame.setVisible(true);
+			new CertificateView(cert.toString());
 		}
 	}
 	
 	private void setActiveButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_setActiveButtonActionPerformed
+		setActiveAction();
+	}//GEN-LAST:event_setActiveButtonActionPerformed
+	
+	private void setActiveAction() {
 		int ks = keyStoreList.getSelectedIndex();
 		int alias = aliasTable.getSelectedRow();
 		if (ks > -1 && alias>-1) {
@@ -830,18 +882,14 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 						}
 					}
 				} catch (Exception e) {
-					JOptionPane.showMessageDialog(null, new String[] {
-							Constant.messages.getString("options.cert.error.accesskeystore"), e.toString()}, 
-							Constant.messages.getString("options.cert.error"), JOptionPane.ERROR_MESSAGE);
+					showKeyStoreCertError(e.toString());
 				}
 			}
 			Certificate cert = contextManager.getCertificate(ks, alias);
 			try {
 				contextManager.getFingerPrint(cert);
 			} catch (KeyStoreException kse) {
-				JOptionPane.showMessageDialog(null, new String[] {
-						Constant.messages.getString("options.cert.error.fingerprint"), kse.toString()}, 
-						Constant.messages.getString("options.cert.error"), JOptionPane.ERROR_MESSAGE);
+				showCertError("options.cert.error.fingerprint", kse.toString());
 			}
 
 			try {
@@ -855,10 +903,7 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 			}
 			certificateTextField.setText(contextManager.getDefaultKey());
 		}
-
-
-
-	}//GEN-LAST:event_setActiveButtonActionPerformed
+	}
 
 	public String getPassword() {
 		JPasswordField askPasswordField = new JPasswordField();
@@ -948,11 +993,6 @@ public class OptionsCertificatePanel extends AbstractParamPanel implements Obser
 		//getBtnLocation().setEnabled(getChkUseClientCertificate().isSelected());
 		//getTxtLocation().setText(options.getCertificateParam().getClientCertLocation());
 		enableUnsafeSSLRenegotiationCheckBox.setSelected(certParam.isAllowUnsafeSslRenegotiation());
-	}
-
-	@Override
-	public void validateParam(Object obj) {
-		// no validation needed
 	}
 
 	@Override

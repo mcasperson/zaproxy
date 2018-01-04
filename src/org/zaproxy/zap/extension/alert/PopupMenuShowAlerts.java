@@ -23,8 +23,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import javax.swing.ImageIcon;
-
 import org.apache.commons.httpclient.URI;
 import org.parosproxy.paros.core.scanner.Alert;
 import org.parosproxy.paros.model.HistoryReference;
@@ -36,11 +34,17 @@ public class PopupMenuShowAlerts extends PopupMenuHistoryReferenceContainer {
 
 	private static final long serialVersionUID = 1L;
 
+	private final ExtensionAlert extension;
+
     /**
-     * @param label
+     * Constructs a {@code PopupMenuShowAlerts} with the given label.
+     * 
+     * @param label the text shown in the pop up menu
+     * @param extension the {@code ExtensionAlert} to show the Edit Alert dialogue.
      */
-    public PopupMenuShowAlerts(String label) {
+    public PopupMenuShowAlerts(String label, ExtensionAlert extension) {
         super(label);
+        this.extension = extension;
         setProcessExtensionPopupChildren(false);
     }
 
@@ -58,9 +62,11 @@ public class PopupMenuShowAlerts extends PopupMenuHistoryReferenceContainer {
 
 	@Override
     public boolean isButtonEnabledForHistoryReference (HistoryReference href) {
-		List<Alert> alerts = href.getAlerts();
+		List<Alert> alerts;
 		if (href.getSiteNode() != null) {
 			alerts = href.getSiteNode().getAlerts();
+		} else {
+			alerts = href.getAlerts();
 		}
 		URI hrefURI = href.getURI();
 		List<PopupMenuShowAlert> alertList = new ArrayList<>(alerts.size()); 
@@ -69,8 +75,8 @@ public class PopupMenuShowAlerts extends PopupMenuHistoryReferenceContainer {
 			if (hrefURI != null && ! alert.getUri().equals(hrefURI.toString())) {
 				continue;
 			}
-			final PopupMenuShowAlert menuItem = new PopupMenuShowAlert(alert.getName(), alert);
-			menuItem.setIcon(new ImageIcon(alert.getIconUrl()));
+			final PopupMenuShowAlert menuItem = new PopupMenuShowAlert(alert.getName(), extension, alert);
+			menuItem.setIcon(alert.getIcon());
 			
 			alertList.add(menuItem);
 		}

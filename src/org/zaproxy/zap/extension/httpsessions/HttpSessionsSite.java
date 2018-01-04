@@ -18,7 +18,6 @@
 package org.zaproxy.zap.extension.httpsessions;
 
 import java.net.HttpCookie;
-import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -224,8 +223,7 @@ public class HttpSessionsSite {
 	private String generateUniqueSessionName() {
 		String name;
 		do {
-			name = MessageFormat.format(Constant.messages.getString("httpsessions.session.defaultName"),
-					Integer.valueOf(lastGeneratedSessionID++));
+			name = Constant.messages.getString("httpsessions.session.defaultName", Integer.valueOf(lastGeneratedSessionID++));
 		} while (!isSessionNameUnique(name));
 
 		return name;
@@ -421,6 +419,7 @@ public class HttpSessionsSite {
 			}
 		}
 
+		boolean newSession = false;
 		// If the session didn't exist, create it now
 		if (session == null) {
 			session = new HttpSession(generateUniqueSessionName(),
@@ -452,7 +451,7 @@ public class HttpSessionsSite {
 					}
 				}
 			}
-			log.info("Created a new session as no match was found: " + session);
+			newSession = true;
 		}
 
 		// Update the session
@@ -460,6 +459,10 @@ public class HttpSessionsSite {
 			for (Entry<String, Cookie> tv : tokenValues.entrySet()) {
 				session.setTokenValue(tv.getKey(), tv.getValue());
 			}
+		}
+
+		if (newSession && log.isDebugEnabled()) {
+			log.debug("Created a new session as no match was found: " + session);
 		}
 
 		// Update the count of messages matched
@@ -579,7 +582,7 @@ public class HttpSessionsSite {
 	 * 
 	 * @return the http sessions
 	 */
-	protected Set<HttpSession> getHttpSessions() {
+	public Set<HttpSession> getHttpSessions() {
 		synchronized (this.sessions) {
 			return Collections.unmodifiableSet(sessions);
 		}
@@ -591,7 +594,7 @@ public class HttpSessionsSite {
 	 * @param name the name
 	 * @return the http session with a given name, or null, if no such session exists
 	 */
-	protected HttpSession getHttpSession(String name) {
+	public HttpSession getHttpSession(String name) {
 		synchronized (this.sessions) {
 			for (HttpSession session : sessions) {
 				if (session.getName().equals(name)) {
@@ -637,5 +640,9 @@ public class HttpSessionsSite {
 
 	static void resetLastGeneratedSessionId() {
 		lastGeneratedSessionID = 0;
+	}
+	
+	public static int getNextSessionId() {
+		return lastGeneratedSessionID++;
 	}
 }

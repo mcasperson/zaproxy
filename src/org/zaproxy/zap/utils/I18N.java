@@ -26,6 +26,16 @@ public class I18N {
     public I18N (Locale locale) {
     	setLocale(locale);
     }
+
+    /**
+     * Gets the core resource bundle.
+     *
+     * @return the core resource bundle, never {@code null}.
+     * @since 2.7.0
+     */
+    public ResourceBundle getCoreResourceBundle() {
+        return this.stdMessages;
+    }
     
     public void addMessageBundle(String prefix, ResourceBundle bundle) {
 		logger.debug("Adding message bundle with prefix: " + prefix);
@@ -48,6 +58,18 @@ public class I18N {
     	return this.addonMessages.get(prefix);
     }
     
+    /**
+     * Gets the message with the given key.
+     * <p>
+     * The message will be obtained either from the core {@link ResourceBundle} or a {@code ResourceBundle} of an add-on
+     * (depending on the prefix of the key).
+     *
+     * @param key the key.
+     * @return the message.
+     * @throws MissingResourceException if the given key was not found.
+     * @see #getString(String, Object...)
+     * @see #getMessageBundle(String)
+     */
     public String getString(String key) {
     	if (key.indexOf(".") > 0) {
     		String prefix = key.substring(0, key.indexOf("."));
@@ -60,7 +82,9 @@ public class I18N {
     }
 
     /**
-     * Gets the String with the given key surrounded by <i>&lt;html&gt;&lt;p&gt; tags.
+     * Gets the String with the given key surrounded by {@code <html><p>} tags.
+     * @param key the key of the string
+     * @return the string read wrapped in HTML and paragraph tags
      */
 	public String getHtmlWrappedString(String key) {
 		String values = getString(key);
@@ -72,8 +96,8 @@ public class I18N {
     /**
      * Returns the specified char from the language file. 
      * As these are typically used for mnemnoics the 'null' char is returned if the key is not defined 
-     * @param key
-     * @return
+     * @param key the key of the char
+     * @return the char read, or null char if not found
      */
     public char getChar(String key) {
     	try {
@@ -121,6 +145,17 @@ public class I18N {
     	return this.stdMessages.containsKey(key);
 	}
 	
+    /**
+     * Gets the message with the given key, formatted with the given parameters.
+     * <p>
+     * The message will be obtained either from the core {@link ResourceBundle} or a {@code ResourceBundle} of an add-on
+     * (depending on the prefix of the key) and then {@link MessageFormat#format(String, Object...) formatted}.
+     *
+     * @param key the key.
+     * @param params the parameters to format the message.
+     * @return the message formatted.
+     * @see #getString(String)
+     */
     public String getString(String key, Object... params  ) {
         try {
             return MessageFormat.format(this.getString(key), params);

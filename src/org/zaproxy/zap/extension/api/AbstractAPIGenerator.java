@@ -30,6 +30,8 @@ import org.parosproxy.paros.Constant;
 
 /**
  * The base class for ZAP API client generators.
+ * 
+ * @since 2.6.0
  */
 abstract class AbstractAPIGenerator {
 

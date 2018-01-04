@@ -40,11 +40,17 @@
 // ZAP: 2013/12/09 Set Content-type only in case of POST or PUT HTTP methods
 // ZAP: 2015/08/07 Issue 1768: Update to use a more recent default user agent
 // ZAP: 2016/06/17 Remove redundant initialisations of instance variables
+// ZAP: 2016/09/26 JavaDoc tweaks
+// ZAP: 2017/02/23 Issue 3227: Limit API access to whitelisted IP addresses
+// ZAP: 2017/04/24 Added more HTTP methods
+// ZAP: 2017/10/19 Skip parsing of empty Cookie headers.
+// ZAP: 2017/11/22 Address a NPE in isImage().
 
 package org.parosproxy.paros.network;
 
 import java.io.UnsupportedEncodingException;
 import java.net.HttpCookie;
+import java.net.InetAddress;
 import java.net.URLEncoder;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -64,17 +70,21 @@ public class HttpRequestHeader extends HttpHeader {
     private static final Logger log = Logger.getLogger(HttpRequestHeader.class);
   
     // method list
-    public static final String OPTIONS = "OPTIONS";
+    public static final String CONNECT = "CONNECT";
+    public static final String DELETE = "DELETE";
     public static final String GET = "GET";
     public static final String HEAD = "HEAD";
+    public static final String OPTIONS = "OPTIONS";
+    public static final String PATCH = "PATCH";
     public static final String POST = "POST";
     public static final String PUT = "PUT";
-    public static final String DELETE = "DELETE";
     public static final String TRACE = "TRACE";
-    public static final String CONNECT = "CONNECT";
-    
+    public static final String TRACK = "TRACK";
+
     // ZAP: Added method array
-    public static final String[] METHODS = {OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE, CONNECT};
+    public static final String[] METHODS = {
+        CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, TRACE, TRACK
+    };
     public static final String HOST = "Host";
     private static final Pattern patternRequestLine = Pattern.compile(p_METHOD + p_SP + p_URI + p_SP + p_VERSION, Pattern.CASE_INSENSITIVE);
     // private static final Pattern patternHostHeader
@@ -84,6 +94,7 @@ public class HttpRequestHeader extends HttpHeader {
     private String mMethod;
     private URI mUri;
     private String mHostName;
+    private InetAddress senderAddress;
     
     /**
      * The host port number of this request message, a non-negative integer.
@@ -117,10 +128,10 @@ public class HttpRequestHeader extends HttpHeader {
     /**
      * Constructor of a request header with the string.
      *
-     * @param data
-     * @param isSecure If this request header is secure. URL will be converted
-     * to HTTPS if secure = true.
-     * @throws HttpMalformedHeaderException
+     * @param data the request header
+     * @param isSecure {@code true} if the request should be secure, {@code false} otherwise
+     * @throws HttpMalformedHeaderException if the request being set is malformed
+     * @see #setSecure(boolean)
      */
     public HttpRequestHeader(String data, boolean isSecure) throws HttpMalformedHeaderException {
         setMessage(data, isSecure);
@@ -130,8 +141,8 @@ public class HttpRequestHeader extends HttpHeader {
      * Constructor of a request header with the string. Whether this is a secure
      * header depends on the URL given.
      *
-     * @param data
-     * @throws HttpMalformedHeaderException
+     * @param data the request header
+     * @throws HttpMalformedHeaderException if the request being set is malformed
      */
     public HttpRequestHeader(String data) throws HttpMalformedHeaderException {
         setMessage(data);
@@ -191,10 +202,10 @@ public class HttpRequestHeader extends HttpHeader {
     /**
      * Set this request header with the given message.
      *
-     * @param data
-     * @param isSecure If this request header is secure. URL will be converted
-     * to HTTPS if secure = true.
-     * @throws HttpMalformedHeaderException
+     * @param data the request header
+     * @param isSecure {@code true} if the request should be secure, {@code false} otherwise
+     * @throws HttpMalformedHeaderException if the request being set is malformed
+     * @see #setSecure(boolean)
      */
     public void setMessage(String data, boolean isSecure) throws HttpMalformedHeaderException {
         super.setMessage(data);
@@ -229,7 +240,7 @@ public class HttpRequestHeader extends HttpHeader {
     /**
      * Get the HTTP method (GET, POST ... etc).
      *
-     * @return
+     * @return the request method
      */
     public String getMethod() {
         return mMethod;
@@ -238,7 +249,7 @@ public class HttpRequestHeader extends HttpHeader {
     /**
      * Set the HTTP method of this request header.
      *
-     * @param method
+     * @param method the new method, must not be {@code null}.
      */
     public void setMethod(String method) {
         mMethod = method.toUpperCase();
@@ -247,20 +258,19 @@ public class HttpRequestHeader extends HttpHeader {
     /**
      * Get the URI of this request header.
      *
-     * @return
+     * @return the request URI
      */
     public URI getURI() {
         return mUri;
     }
 
     /**
-     * Set the URI of this request header.
+     * Sets the URI of this request header.
      *
-     * @param uri
-     * @throws URIException
-     * @throws NullPointerException
+     * @param uri the new request URI
+     * @throws URIException if an error occurred while setting the request URI
      */
-    public void setURI(URI uri) throws URIException, NullPointerException {
+    public void setURI(URI uri) throws URIException {
 
         if (uri.getScheme() == null || uri.getScheme().equals("")) {
             mUri = new URI(HTTP + "://" + getHeader(HOST) + "/" + mUri.toString(), true);
@@ -282,7 +292,7 @@ public class HttpRequestHeader extends HttpHeader {
     /**
      * Get if this request header is under secure connection.
      *
-     * @return
+     * @return {@code true} if the request is secure, {@code false} otherwise
      * @deprecated Replaced by {@link #isSecure()}. It will be removed in a
      * future release.
      */
@@ -302,13 +312,12 @@ public class HttpRequestHeader extends HttpHeader {
     }
 
     /**
-     * Set if this request header is under secure connection.
+     * Sets whether or not the request is done using a secure scheme, HTTPS.
      *
-     * @param isSecure
-     * @throws URIException
-     * @throws NullPointerException
+     * @param isSecure {@code true} if the request should be secure, {@code false} otherwise
+     * @throws URIException if an error occurred while rebuilding the request URI
      */
-    public void setSecure(boolean isSecure) throws URIException, NullPointerException {
+    public void setSecure(boolean isSecure) throws URIException {
         mIsSecure = isSecure;
 
         if (mUri == null) {
@@ -356,10 +365,9 @@ public class HttpRequestHeader extends HttpHeader {
     /**
      * Parse this request header.
      *
-     * @param isSecure
-     * @return
-     * @throws URIException
-     * @throws NullPointerException
+     * @param isSecure {@code true} if the request is secure, {@code false} otherwise
+     * @throws URIException if failed to parse the URI
+     * @throws HttpMalformedHeaderException if the request being parsed is malformed
      */
     private void parse(boolean isSecure) throws URIException, HttpMalformedHeaderException {
 
@@ -492,6 +500,10 @@ public class HttpRequestHeader extends HttpHeader {
      */
     @Override
     public boolean isImage() {
+        if (getURI() == null) {
+            return false;
+        }
+
         try {
             // ZAP: prevents a NullPointerException when no path exists
             final String path = getURI().getPath();
@@ -510,8 +522,8 @@ public class HttpRequestHeader extends HttpHeader {
      * Return if the data given is a request header basing on the first start
      * line.
      *
-     * @param data
-     * @return
+     * @param data the data to be checked
+     * @return {@code true} if the data contains a request line, {@code false} otherwise.
      */
     public static boolean isRequestLine(String data) {
         return patternPartialRequestLine.matcher(data).find();
@@ -716,6 +728,11 @@ public class HttpRequestHeader extends HttpHeader {
                     cookieLine = cookieLine.substring(HttpHeader.COOKIE.length() + 1);
                 }
                 
+                if (cookieLine.isEmpty()) {
+                    // Nothing to parse.
+                    continue;
+                }
+
                 // These can be comma separated type=value
                 String[] cookieArray = cookieLine.split(";");
                 for (String cookie : cookieArray) {
@@ -755,4 +772,23 @@ public class HttpRequestHeader extends HttpHeader {
         
         return cookies;
     }
+
+    /**
+     * Sets the senders IP address. Note that this is not persisted.
+     * @param inetAddress the senders IP address
+     * @since 2.6.0
+     */
+    public void setSenderAddress(InetAddress inetAddress) {
+        this.senderAddress = inetAddress;
+    }
+
+    /**
+     * Gets the senders IP address
+     * @return the senders IP address
+     * @since 2.6.0
+     */
+    public InetAddress getSenderAddress() {
+        return senderAddress;
+    }
+    
 }

@@ -37,6 +37,7 @@ public class VariantJSONQuery extends VariantAbstractRPCQuery {
     public static final int BEGIN_OBJECT = '{';
     public static final int END_OBJECT = '}';
     public static final int END_ARRAY = ']';
+    public static final int BACKSLASH = '\\';
 
     private SimpleStringReader sr;
 
@@ -84,9 +85,6 @@ public class VariantJSONQuery extends VariantAbstractRPCQuery {
     private static final int STATE_READ_VALUE = 2;
     private static final int STATE_READ_POST_VALUE = 3;
     
-    /**
-     * 
-     */
     private void parseObject() {
         int state = STATE_READ_START_OBJECT;
         boolean objectRead = false;
@@ -102,7 +100,7 @@ public class VariantJSONQuery extends VariantAbstractRPCQuery {
                     chr = sr.skipWhitespaceRead();
                     if (chr == BEGIN_OBJECT) {
                         objectRead = true;
-                                
+
                         chr = sr.skipWhitespaceRead();
                         if (chr == END_OBJECT) {    // empty object
                             return;
@@ -126,12 +124,9 @@ public class VariantJSONQuery extends VariantAbstractRPCQuery {
                     if (chr == QUOTATION_MARK) {
                         
                         beginToken = sr.getPosition();
-                        while ((chr = sr.read()) != QUOTATION_MARK) {
-                            if (chr == -1)
-                                throw new IllegalArgumentException("EOF reached while reading JSON field name");
-                        }
+                        readEscapedString();
                         
-                        endToken = sr.getPosition();                        
+                        endToken = sr.getPosition() - 1;
                         // Now we have the string object name
                         // we can do something here for value filtering...
                         field = getToken(beginToken, endToken);
@@ -192,11 +187,7 @@ public class VariantJSONQuery extends VariantAbstractRPCQuery {
         // Check if the value is a string        
         if (chr == QUOTATION_MARK) {
             int beginToken = sr.getPosition();
-            while ((chr = sr.read()) != QUOTATION_MARK) {
-                if (chr == -1) {
-                    throw new IllegalArgumentException("EOF reached while reading JSON field name");
-                }
-            }
+            readEscapedString();
             
             // Now we have the string object value
             // Put everything inside the parameter array
@@ -297,9 +288,22 @@ public class VariantJSONQuery extends VariantAbstractRPCQuery {
         }
     }
 
-    /**
-     *
-     */
+    private void readEscapedString(){
+        int chr;
+        while (true) {
+            chr = sr.read();
+            if (chr == BACKSLASH) {
+                chr = sr.read();
+            }
+            else if (chr == QUOTATION_MARK) {
+                break;
+            }
+            if (chr == -1) {
+                throw new IllegalArgumentException("EOF reached while reading JSON field name");
+            }
+        }
+    }
+
     protected class SimpleStringReader {
         private static final String WS = " \t\r\n";
         private String str;
@@ -344,9 +348,6 @@ public class VariantJSONQuery extends VariantAbstractRPCQuery {
             return str.charAt(next++);
         }
 
-        /**
-         *
-         */
         public void unreadLastCharacter() {
             next--;
         }

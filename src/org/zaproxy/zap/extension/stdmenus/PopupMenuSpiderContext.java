@@ -31,7 +31,10 @@ import org.zaproxy.zap.view.popup.PopupMenuItemContext;
 
 /**
  * The Class PopupMenuSpiderContext.
+ * 
+ * @deprecated (2.6.0) Superseded by {@link PopupMenuSpiderDialog}.
  */
+@Deprecated
 public class PopupMenuSpiderContext extends PopupContextMenuItemHolder {
 
 	/** The Constant serialVersionUID. */
@@ -57,8 +60,7 @@ public class PopupMenuSpiderContext extends PopupContextMenuItemHolder {
 	 */
 	private ExtensionSpider getExtensionSpider() {
 		if (extension == null) {
-			extension = (ExtensionSpider) Control.getSingleton().getExtensionLoader()
-					.getExtension(ExtensionSpider.NAME);
+			extension = Control.getSingleton().getExtensionLoader().getExtension(ExtensionSpider.class);
 		}
 		return extension;
 	}

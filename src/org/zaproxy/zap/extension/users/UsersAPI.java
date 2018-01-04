@@ -99,8 +99,8 @@ public class UsersAPI extends ApiImplementor {
 
 		// Load the authentication method actions
 		if (Control.getSingleton() != null) {
-			ExtensionAuthentication authenticationExtension = (ExtensionAuthentication) Control
-					.getSingleton().getExtensionLoader().getExtension(ExtensionAuthentication.NAME);
+			ExtensionAuthentication authenticationExtension = Control
+					.getSingleton().getExtensionLoader().getExtension(ExtensionAuthentication.class);
 			this.loadedAuthenticationMethodActions = new HashMap<>();
 			if (authenticationExtension != null) {
 				for (AuthenticationMethodType t : authenticationExtension.getAuthenticationMethodTypes()) {
@@ -238,7 +238,7 @@ public class UsersAPI extends ApiImplementor {
 		fields.put("enabled", Boolean.toString(u.isEnabled()));
 		fields.put("credentials", u.getAuthenticationCredentials().getApiResponseRepresentation().toJSON()
 				.toString());
-		ApiResponseSet response = new ApiResponseSet("user", fields);
+		ApiResponseSet<String> response = new ApiResponseSet<String>("user", fields);
 		return response;
 	}
 

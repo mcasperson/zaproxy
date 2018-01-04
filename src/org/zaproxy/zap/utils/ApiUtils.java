@@ -19,6 +19,7 @@
  */
 package org.zaproxy.zap.utils;
 
+import net.sf.json.JSONException;
 import net.sf.json.JSONObject;
 
 import java.util.Locale;
@@ -43,13 +44,15 @@ public final class ApiUtils {
 	 * @throws ApiException the api exception
 	 */
 	public static int getIntParam(JSONObject params, String paramName) throws ApiException {
-		int value;
-		try {
-			value = params.getInt(paramName);
-		} catch (Exception ex) {
-			throw new ApiException(Type.MISSING_PARAMETER, paramName + ": " + ex.getLocalizedMessage());
+		if (!params.containsKey(paramName)) {
+			throw new ApiException(ApiException.Type.MISSING_PARAMETER, paramName);
 		}
-		return value;
+
+		try {
+			return params.getInt(paramName);
+		} catch (JSONException e) {
+			throw new ApiException(ApiException.Type.ILLEGAL_PARAMETER, paramName, e);
+		}
 	}
 
 	/**
@@ -87,11 +90,13 @@ public final class ApiUtils {
 	}
 
 	/**
-	 * Gets an optional enum param, returning <code>null</code> if the parameter was not found.
+	 * Gets an optional enum param, returning {@code null} if the parameter was not found.
 	 *
+	 * @param <E> the type of the enum that will be returned
 	 * @param params the params
 	 * @param paramName the param name
-	 * @return the enum, or <code>null</code>
+	 * @param enumType the type of the enum
+	 * @return the enum, or {@code null}
 	 * @throws ApiException if the param value does not match any of the possible enum values
 	 */
 	public static <E extends Enum<E>> E getOptionalEnumParam(JSONObject params, String paramName,

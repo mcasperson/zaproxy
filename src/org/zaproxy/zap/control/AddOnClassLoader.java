@@ -35,10 +35,15 @@ import java.util.List;
  */
 public class AddOnClassLoader extends URLClassLoader {
 
+    static {
+        ClassLoader.registerAsParallelCapable();
+    }
+
     private final ParentClassLoader parent;
     private final List<AddOnClassLoader> childClassLoaders;
     private List<AddOnClassLoader> dependencies;
     private AddOnClassnames addOnClassnames;
+    private ClassLoadingLockProvider classLoadingLockProvider;
 
     /**
      * Constructs a new {@code AddOnClassLoader} without dependencies on other add-ons.
@@ -64,6 +69,21 @@ public class AddOnClassLoader extends URLClassLoader {
      */
     public AddOnClassLoader(URL addOnFileUrl, ClassLoader parent, AddOnClassnames addOnClassnames) {
         this(addOnFileUrl, parent, Collections.<AddOnClassLoader> emptyList(), addOnClassnames);
+    }
+
+    /**
+     * Constructs a new {@code AddOnClassLoader} without dependencies on other add-ons. Possibly restricting or allowing the
+     * loading of the given {@code addOnClassnames}, directly from this {@code AddOnClassLoader}.
+     * 
+     * @param addOnFileUrl the URL to the add-on file that will be (first) used to load classes and resources
+     * @param parent the parent class loader for delegation and sharing of class loading lock(s).
+     * @param addOnClassnames the classnames that can be loaded
+     * @throws IllegalArgumentException if the {@code addOnFileUrl} or {@code parent} is {@code null}.
+     * @since 2.7.0
+     */
+    public AddOnClassLoader(URL addOnFileUrl, AddOnLoader parent, AddOnClassnames addOnClassnames) {
+        this(addOnFileUrl, (ClassLoader) parent, Collections.<AddOnClassLoader> emptyList(), addOnClassnames);
+        this.classLoadingLockProvider = parent::getClassLoadingLock;
     }
 
     /**
@@ -115,6 +135,23 @@ public class AddOnClassLoader extends URLClassLoader {
 
     /**
      * Constructs a new {@code AddOnClassLoader} with the given {@code dependencies} which are used to find classes and
+     * resources when not found in the add-on or in {@code parent} ClassLoader. Possibly restricting or allowing the loading of
+     * the given {@code addOnClassnames}, directly from this {@code AddOnClassLoader}.
+     * 
+     * @param addOnFileUrl the URL to the add-on file that will be (first) used to load classes and resources
+     * @param parent the parent class loader for delegation and sharing of class loading lock(s).
+     * @param dependencies the {@code AddOnClassLoader}s of the dependencies of the add-on
+     * @param addOnClassnames the classnames that can be loaded
+     * @throws IllegalArgumentException if the {@code addOnFileUrl}, {@code parent} or {@code dependencies} is {@code null}.
+     * @since 2.7.0
+     */
+    public AddOnClassLoader(URL addOnFileUrl, AddOnLoader parent, List<AddOnClassLoader> dependencies, AddOnClassnames addOnClassnames) {
+        this(addOnFileUrl, (ClassLoader) parent, dependencies, addOnClassnames);
+        this.classLoadingLockProvider = parent::getClassLoadingLock;
+    }
+
+    /**
+     * Constructs a new {@code AddOnClassLoader} with the given {@code dependencies} which are used to find classes and
      * resources when not found in the add-on or in {@code parent} {@code AddOnClassLoader}.
      * 
      * @param parent the parent class loader for delegation
@@ -135,6 +172,7 @@ public class AddOnClassLoader extends URLClassLoader {
         this.dependencies = dependencies.isEmpty() ? Collections.<AddOnClassLoader> emptyList() : new ArrayList<>(dependencies);
         this.childClassLoaders = Collections.emptyList();
         this.addOnClassnames = AddOnClassnames.ALL_ALLOWED;
+        this.classLoadingLockProvider = parent::getClassLoadingLock;
     }
 
     /**
@@ -165,6 +203,7 @@ public class AddOnClassLoader extends URLClassLoader {
         this.dependencies = dependencies.isEmpty() ? Collections.<AddOnClassLoader> emptyList() : new ArrayList<>(dependencies);
         this.childClassLoaders = Collections.emptyList();
         this.addOnClassnames = addOnClassnames;
+        this.classLoadingLockProvider = parent::getClassLoadingLock;
     }
 
     /**
@@ -183,6 +222,14 @@ public class AddOnClassLoader extends URLClassLoader {
             childClassLoader.close();
         }
         super.close();
+    }
+
+    @Override
+    protected Object getClassLoadingLock(String className) {
+        if (classLoadingLockProvider != null) {
+            return classLoadingLockProvider.getLock(className);
+        }
+        return super.getClassLoadingLock(className);
     }
 
     /**
@@ -283,7 +330,7 @@ public class AddOnClassLoader extends URLClassLoader {
      * @see AddOnClassLoader#findClass(String)
      * @see ClassLoader#loadClass(String, boolean)
      */
-    private static class ParentClassLoader extends ClassLoader {
+    private class ParentClassLoader extends ClassLoader {
 
         public ParentClassLoader(ClassLoader classLoader) {
             super(classLoader);
@@ -293,5 +340,19 @@ public class AddOnClassLoader extends URLClassLoader {
         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
             return super.loadClass(name, resolve);
         }
+
+        @Override
+        protected Object getClassLoadingLock(String className) {
+            if (classLoadingLockProvider != null) {
+                return classLoadingLockProvider.getLock(className);
+            }
+            return super.getClassLoadingLock(className);
+        }
+    }
+
+    @FunctionalInterface
+    private static interface ClassLoadingLockProvider {
+
+        Object getLock(String className);
     }
 }

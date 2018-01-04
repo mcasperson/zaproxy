@@ -22,6 +22,9 @@ package org.zaproxy.zap.control;
 
 import java.io.File;
 import java.net.URL;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -158,16 +161,17 @@ public class AddOnCollection {
     		return;
     	}
     	if (! dir.exists()) {
-    		logger.error("No such directory: " + dir.getAbsolutePath());
+    		logger.warn("No such directory: " + dir.getAbsolutePath());
+    		return;
     	}
     	if (! dir.isDirectory()) {
-    		logger.error("Not a directory: " + dir.getAbsolutePath());
+    		logger.warn("Not a directory: " + dir.getAbsolutePath());
+    		return;
     	}
-    	// Load the addons
-        File[] listFile = dir.listFiles();
 
-        if (listFile != null) {
-        	for (File addOnFile : listFile) {
+    	// Load the addons
+    	try (DirectoryStream<Path> addOnFiles = Files.newDirectoryStream(dir.toPath(), "*" + AddOn.FILE_EXTENSION)) {
+        	for (Path addOnFile : addOnFiles) {
         		if (AddOn.isAddOn(addOnFile)) {
 	            	AddOn ao = createAddOn(addOnFile);
                     if (ao == null) {
@@ -180,12 +184,12 @@ public class AddOnCollection {
 		            		if (ao.isUpdateTo(addOn)) {
                                 if (ao.canLoadInCurrentVersion()) {
     		            			// Replace in situ so we're not changing a list we're iterating through
-    		                    	logger.debug("Addon " + addOn.getId() + " version " + addOn.getFileVersion() + 
-    		                    			" superceeded by " + ao.getFileVersion());
+    		                    	logger.debug("Addon " + addOn.getId() + " version " + addOn.getVersion() + 
+    		                    			" superceeded by " + ao.getVersion());
     		                    	addOns.remove(addOn);
                                 } else {
                                     if (logger.isDebugEnabled()) {
-                                        logger.debug("Ignoring newer addon " + ao.getId() + " version " + ao.getFileVersion()
+                                        logger.debug("Ignoring newer addon " + ao.getId() + " version " + ao.getVersion()
                                                 + " because of ZAP version constraints; Not before=" + ao.getNotBeforeVersion()
                                                 + " Not from=" + ao.getNotFromVersion() + " Current Version="
                                                 + Constant.PROGRAM_VERSION);
@@ -194,7 +198,7 @@ public class AddOnCollection {
                                 }
 		            		} else {
 		            			// Same or older version, dont include
-		                    	logger.debug("Addon " + ao.getId() + " version " + ao.getFileVersion() + 
+		                    	logger.debug("Addon " + ao.getId() + " version " + ao.getVersion() + 
 		                    			" not latest.");
 		            			add = false;
 		            		}
@@ -202,7 +206,7 @@ public class AddOnCollection {
 	            		}
 	            	}
 	            	if (add) {
-	            		logger.debug("Found addon " + ao.getId() + " version " + ao.getFileVersion());
+	            		logger.debug("Found addon " + ao.getId() + " version " + ao.getVersion());
 	            		this.addOns.add(ao);
 	            	}
         		}
@@ -210,7 +214,7 @@ public class AddOnCollection {
         }
     }
 
-    private static AddOn createAddOn(File addOnFile) {
+    private static AddOn createAddOn(Path addOnFile) {
         try {
             return new AddOn(addOnFile);
         } catch (Exception e) {

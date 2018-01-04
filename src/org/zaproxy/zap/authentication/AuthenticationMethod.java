@@ -19,6 +19,7 @@
  */
 package org.zaproxy.zap.authentication;
 
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import org.apache.commons.httpclient.URIException;
@@ -26,6 +27,7 @@ import org.parosproxy.paros.Constant;
 import org.parosproxy.paros.network.HttpMessage;
 import org.parosproxy.paros.view.View;
 import org.zaproxy.zap.extension.api.ApiResponse;
+import org.zaproxy.zap.extension.api.ApiResponseSet;
 import org.zaproxy.zap.model.Context;
 import org.zaproxy.zap.model.SessionStructure;
 import org.zaproxy.zap.session.SessionManagementMethod;
@@ -33,9 +35,12 @@ import org.zaproxy.zap.session.WebSession;
 import org.zaproxy.zap.users.User;
 import org.zaproxy.zap.utils.Stats;
 
+import net.sf.json.JSON;
+import net.sf.json.JSONObject;
+
 /**
- * The AuthenticationMethod represents an authentication method that can be used to authenticate an
- * entity in a particular WebApplication.
+ * The {@code AuthenticationMethod} represents an authentication method that can be used to authenticate an
+ * entity in a particular web application.
  */
 public abstract class AuthenticationMethod {
 
@@ -118,6 +123,7 @@ public abstract class AuthenticationMethod {
 	 * @param sessionManagementMethod the set up session management method is provided so it can be
 	 *            used, if needed, to automatically extract session information from Http Messages.
 	 * @param credentials the credentials
+	 * @param user the user to authenticate
 	 * @return an authenticated web session
 	 * @throws UnsupportedAuthenticationCredentialsException the unsupported authentication
 	 *             credentials exception {@link WebSession}.
@@ -330,4 +336,17 @@ public abstract class AuthenticationMethod {
 		}
 	}
 
+    static class AuthMethodApiResponseRepresentation<T> extends ApiResponseSet<T> {
+
+        public AuthMethodApiResponseRepresentation(Map<String, T> values) {
+            super("method", values);
+        }
+
+        @Override
+        public JSON toJSON() {
+            JSONObject response = new JSONObject();
+            response.put(getName(), super.toJSON());
+            return response;
+        }
+    }
 }

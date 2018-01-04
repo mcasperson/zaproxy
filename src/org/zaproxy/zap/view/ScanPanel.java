@@ -43,6 +43,7 @@ import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
+import javax.swing.tree.TreeNode;
 
 import org.apache.log4j.Logger;
 import org.parosproxy.paros.Constant;
@@ -59,6 +60,7 @@ import org.parosproxy.paros.view.View;
 import org.zaproxy.zap.model.Context;
 import org.zaproxy.zap.model.GenericScanner;
 import org.zaproxy.zap.users.User;
+import org.zaproxy.zap.utils.DisplayUtils;
 import org.zaproxy.zap.utils.SortedComboBoxModel;
 
 public abstract class ScanPanel extends AbstractPanel {
@@ -92,10 +94,12 @@ public abstract class ScanPanel extends AbstractPanel {
 	private static Logger log = Logger.getLogger(ScanPanel.class);
     
     /**
-     * @param prefix
-     * @param icon
-     * @param extension
-     * @param scanParam
+     * Constructs a {@code ScanPanel} with the given message resources prefix, tab icon, extension and options.
+     * 
+     * @param prefix the prefix of the message resources
+     * @param icon the icon for the tab
+     * @param extension the extension
+     * @param scanParam the options
      */
     public ScanPanel(String prefix, ImageIcon icon, ExtensionAdaptor extension, AbstractParam scanParam) {
         super();
@@ -312,7 +316,7 @@ public abstract class ScanPanel extends AbstractPanel {
 		if (startScanButton == null) {
 			startScanButton = new JButton();
 			startScanButton.setToolTipText(Constant.messages.getString(prefix + ".toolbar.button.start"));
-			startScanButton.setIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/131.png")));
+			startScanButton.setIcon(DisplayUtils.getScaledIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/131.png"))));
 			startScanButton.setEnabled(false);
 			startScanButton.addActionListener(new ActionListener () {
 
@@ -331,7 +335,7 @@ public abstract class ScanPanel extends AbstractPanel {
 		if (stopScanButton == null) {
 			stopScanButton = new JButton();
 			stopScanButton.setToolTipText(Constant.messages.getString(prefix + ".toolbar.button.stop"));
-			stopScanButton.setIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/142.png")));
+			stopScanButton.setIcon(DisplayUtils.getScaledIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/142.png"))));
 			stopScanButton.setEnabled(false);
 			stopScanButton.addActionListener(new ActionListener () {
 				@Override
@@ -348,10 +352,10 @@ public abstract class ScanPanel extends AbstractPanel {
 			pauseScanButton = new ZapToggleButton();
 			pauseScanButton.setToolTipText(Constant.messages.getString(prefix + ".toolbar.button.pause"));
 			pauseScanButton.setSelectedToolTipText(Constant.messages.getString(prefix + ".toolbar.button.unpause"));
-			pauseScanButton.setIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/141.png")));
-			pauseScanButton.setRolloverIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/141.png")));
-			pauseScanButton.setSelectedIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/131.png")));
-			pauseScanButton.setRolloverSelectedIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/131.png")));
+			pauseScanButton.setIcon(DisplayUtils.getScaledIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/141.png"))));
+			pauseScanButton.setRolloverIcon(DisplayUtils.getScaledIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/141.png"))));
+			pauseScanButton.setSelectedIcon(DisplayUtils.getScaledIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/131.png"))));
+			pauseScanButton.setRolloverSelectedIcon(DisplayUtils.getScaledIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/131.png"))));
 			pauseScanButton.setEnabled(false);
 			pauseScanButton.addActionListener(new ActionListener () {
 				@Override
@@ -367,7 +371,7 @@ public abstract class ScanPanel extends AbstractPanel {
 		if (optionsButton == null) {
 			optionsButton = new JButton();
 			optionsButton.setToolTipText(Constant.messages.getString(prefix + ".toolbar.button.options"));
-			optionsButton.setIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/041.png")));
+			optionsButton.setIcon(DisplayUtils.getScaledIcon(new ImageIcon(ScanPanel.class.getResource("/resource/icon/16/041.png"))));
 			optionsButton.addActionListener(new ActionListener () {
 				@Override
 				public void actionPerformed(ActionEvent e) {
@@ -450,7 +454,6 @@ public abstract class ScanPanel extends AbstractPanel {
 	 * 
 	 * @param node the node
 	 * @param incPort the inc port
-	 * @param user the user
 	 */
 	public void scanNode(SiteNode node, boolean incPort) {
 		this.scanNode(node, incPort, null);
@@ -623,9 +626,9 @@ public abstract class ScanPanel extends AbstractPanel {
 		SiteNode rootNode = (SiteNode) siteTree.getRoot();
 		
 		@SuppressWarnings("unchecked")
-		Enumeration<SiteNode> en = rootNode.children();
+		Enumeration<TreeNode> en = rootNode.children();
 		while (en.hasMoreElements()) {
-			SiteNode sn = en.nextElement();
+			SiteNode sn = (SiteNode) en.nextElement();
 			String nodeName = sn.getNodeName();
 			if (nodeName.toLowerCase().startsWith("https:") && !hasPort(nodeName)) {
 				nodeName += ":443";
@@ -673,8 +676,8 @@ public abstract class ScanPanel extends AbstractPanel {
 	
 	/**
 	 * Does nothing. Override to handle context specific objects
-	 * @param scanThread
-	 * @param contextSpecificObjects
+	 * @param scanThread the thread of the scan
+	 * @param contextSpecificObjects context specific objects to configure the scan
 	 */
 	protected void handleContextSpecificObject(GenericScanner scanThread, Object[] contextSpecificObjects) {
 	}

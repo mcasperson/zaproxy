@@ -37,6 +37,8 @@ import org.zaproxy.zap.view.ZapMenuItem;
 
 public class ExtensionEncoder2 extends ExtensionAdaptor implements OptionsChangedListener {
 
+    private static final String NAME = "ExtensionEncode2";
+	
     private EncodeDecodeDialog encodeDecodeDialog = null;
     
     private PopupEncoder2Menu popupEncodeMenu = null;
@@ -45,14 +47,15 @@ public class ExtensionEncoder2 extends ExtensionAdaptor implements OptionsChange
 	private EncodeDecodeParamPanel optionsPanel;
 	private EncodeDecodeParam params;
 
-    /**
-     * 
-     */
     public ExtensionEncoder2() {
-        super("ExtensionEncode2");
+        super(NAME);
         this.setOrder(22);
 	}
 	
+    @Override
+    public String getUIName() {
+    	return Constant.messages.getString("enc2.name");
+    }
 
 	@Override
 	public void hook(ExtensionHook extensionHook) {

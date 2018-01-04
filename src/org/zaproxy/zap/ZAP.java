@@ -21,6 +21,7 @@ package org.zaproxy.zap;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Locale;
 
@@ -36,9 +37,6 @@ import org.zaproxy.zap.eventBus.EventBus;
 import org.zaproxy.zap.eventBus.SimpleEventBus;
 import org.zaproxy.zap.utils.ClassLoaderUtil;
 
-/**
- * 
- */
 public class ZAP {
 
     /**
@@ -85,10 +83,14 @@ public class ZAP {
     public static void main(String[] args) throws Exception {
         CommandLine cmdLine = null;
         try {
-            cmdLine = new CommandLine(args);
+            cmdLine = new CommandLine(args != null ? Arrays.copyOf(args, args.length) : null);
 
         } catch (final Exception e) {
-            System.out.println(CommandLine.getHelp(null));
+        	// Cant use the CommandLine help here as the 
+        	// i18n messages wont have been loaded
+            System.out.println("Failed due to invalid parameters: " + Arrays.toString(args));
+            System.out.println(e.getMessage());
+            System.out.println("Use '-h' for more details.");
             System.exit(1);
         }
 

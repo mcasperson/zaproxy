@@ -24,12 +24,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -54,6 +57,14 @@ import org.zaproxy.zap.control.BaseZapAddOnXmlData.ExtensionWithDeps;
 import org.zaproxy.zap.extension.pscan.PluginPassiveScanner;
 
 public class AddOn  {
+
+	/**
+	 * The name of the manifest file, contained in the add-ons.
+	 * 
+	 * @since 2.6.0
+	 */
+	public static final String MANIFEST_FILE_NAME = "ZapAddOn.xml";
+
 	public enum Status {unknown, example, alpha, beta, weekly, release}
 	
 	private static ZapRelease v2_4 = new ZapRelease("2.4.0");
@@ -100,12 +111,29 @@ public class AddOn  {
 		SOFT_UNINSTALLATION_FAILED
 	}
 	
+	/**
+	 * The file extension of ZAP add-ons.
+	 * 
+	 * @since 2.6.0
+	 */
+	public static final String FILE_EXTENSION = ".zap";
+
 	private String id;
 	private String name;
 	private String description = "";
 	private String author = "";
-	private int fileVersion;
+	/**
+	 * The version declared in the manifest file.
+	 * <p>
+	 * Never {@code null}.
+	 */
 	private Version version;
+	/**
+	 * The (semantic) version declared in the manifest file, to be replaced by {@link #version}.
+	 * <p>
+	 * Might be {@code null}.
+	 */
+	private Version semVer;
 
 	private Status status;
 	private String changes = "";
@@ -160,8 +188,21 @@ public class AddOn  {
 
 	private static final Logger logger = Logger.getLogger(AddOn.class);
 	
+	/**
+	 * Tells whether or not the given file name matches the name of a ZAP add-on.
+	 * <p>
+	 * The file name must have the format "{@code <id>-<status>-<version>.zap}". The {@code id} is a string, the {@code status}
+	 * must be a value from {@link Status} and the {@code version} must be an integer.
+	 *
+	 * @param fileName the name of the file to check
+	 * @return {@code true} if the given file name is the name of an add-on, {@code false} otherwise.
+	 * @deprecated (2.6.0) Use {@link #isAddOnFileName(String)} instead, the checks done in this method are more
+	 *             strict than it needs to.
+	 * @see #isAddOnFileName(String)
+	 */
+	@Deprecated
 	public static boolean isAddOn(String fileName) {
-		if (! fileName.toLowerCase().endsWith(".zap")) {
+		if (! isAddOnFileName(fileName)) {
 			return false;
 		}
 		if (fileName.substring(0, fileName.indexOf(".")).split("-").length < 3) {
@@ -178,13 +219,76 @@ public class AddOn  {
 		return true;
 		
 	}
-	public static boolean isAddOn(File f) {
-		if (! f.exists()) {
+
+	/**
+	 * Tells whether or not the given file name matches the name of a ZAP add-on.
+	 * <p>
+	 * The file name must have as file extension {@link #FILE_EXTENSION}.
+	 *
+	 * @param fileName the name of the file to check
+	 * @return {@code true} if the given file name is the name of an add-on, {@code false} otherwise.
+	 * @since 2.6.0
+	 */
+	public static boolean isAddOnFileName(String fileName) {
+		if (fileName == null) {
 			return false;
 		}
-		return isAddOn(f.getName());
+		return fileName.toLowerCase(Locale.ROOT).endsWith(FILE_EXTENSION);
 	}
 
+	/**
+	 * Tells whether or not the given file is an add-on.
+	 *
+	 * @param f the file to be checked
+	 * @return {@code true} if the given file is an add-on, {@code false} otherwise.
+	 * @deprecated (2.6.0) Use {@link #isAddOn(Path)} instead.
+	 */
+	@Deprecated
+	public static boolean isAddOn(File f) {
+		return isAddOn(f.toPath());
+	}
+
+	/**
+	 * Tells whether or not the given file is a ZAP add-on.
+	 * <p>
+	 * An add-on is a ZIP file that contains, at least, a {@value #MANIFEST_FILE_NAME} file.
+	 * 
+	 * @param file the file to be checked
+	 * @return {@code true} if the given file is an add-on, {@code false} otherwise.
+	 * @since 2.6.0
+	 * @see #isAddOnFileName(String)
+	 */
+	public static boolean isAddOn(Path file) {
+		if (file == null || file.getNameCount() == 0) {
+			return false;
+		}
+
+		if (!isAddOnFileName(file.getFileName().toString())) {
+			return false;
+		}
+
+		if (!Files.isRegularFile(file) || !Files.isReadable(file)) {
+			return false;
+		}
+
+		try (ZipFile zip = new ZipFile(file.toFile())) {
+			return zip.getEntry(MANIFEST_FILE_NAME) != null;
+		} catch (Exception e) {
+			if (logger.isDebugEnabled()) {
+				logger.debug("Failed to obtain " + MANIFEST_FILE_NAME + " entry:", e);
+			}
+			return false;
+		}
+	}
+
+	/**
+	 * Constructs an {@code AddOn} with the given file name.
+	 *
+	 * @param fileName the file name of the add-on
+	 * @throws Exception if the file name is not valid.
+	 * @deprecated (2.6.0) Use {@link #AddOn(Path)} instead.
+	 */
+	@Deprecated
 	public AddOn(String fileName) throws Exception {
 		// Format is <name>-<status>-<version>.zap
 		if (! isAddOn(fileName)) {
@@ -194,27 +298,49 @@ public class AddOn  {
 		this.id = strArray[0];
 		this.name = this.id;	// Will be overriden if theres a ZapAddOn.xml file
 		this.status = Status.valueOf(strArray[1]);
-		this.fileVersion = Integer.parseInt(strArray[2]);
+		this.version = new Version(Integer.parseInt(strArray[2]) + ".0.0");
 	}
 
 	/**
 	 * Constructs an {@code AddOn} from the given {@code file}.
 	 * <p>
-	 * The {@code ZapAddOn.xml} ZIP file entry is read after validating that the add-on has a valid add-on file name.
+	 * The {@value #MANIFEST_FILE_NAME} ZIP file entry is read after validating that the add-on has a valid add-on file name.
 	 * <p>
 	 * The installation status of the add-on is 'not installed'.
 	 * 
 	 * @param file the file of the add-on
 	 * @throws Exception if the given {@code file} does not exist, does not have a valid add-on file name or an error occurred
-	 *			 while reading the {@code ZapAddOn.xml} ZIP file entry
+	 *             while reading the {@code value #ZAP_ADD_ON_XML} ZIP file entry
+	 * @deprecated (2.6.0) Use {@link #AddOn(Path)} instead.
 	 */
+	@Deprecated
 	public AddOn(File file) throws Exception {
-		this(file.getName());
+		this(file.toPath());
+	}
+
+	/**
+	 * Constructs an {@code AddOn} from the given {@code file}.
+	 * <p>
+	 * The {@value #MANIFEST_FILE_NAME} ZIP file entry is read after validating that the add-on is a valid add-on.
+	 * <p>
+	 * The installation status of the add-on is 'not installed'.
+	 * 
+	 * @param file the file of the add-on
+	 * @throws IOException if the given {@code file} does not exist, does not have a valid add-on file name or an error occurred
+	 *             while reading the {@value #MANIFEST_FILE_NAME} ZIP file entry
+	 * @see #isAddOn(Path)
+	 */
+	public AddOn(Path file) throws IOException {
 		if (! isAddOn(file)) {
-			throw new Exception("Invalid ZAP add-on file " + file.getAbsolutePath());
+			throw new IOException("Invalid ZAP add-on file " + (file != null ? file.toAbsolutePath() : "[null]"));
 		}
-		this.file = file;
+		this.id = extractAddOnId(file.getFileName().toString());
+		this.file = file.toFile();
 		loadManifestFile();
+	}
+
+	private static String extractAddOnId(String fileName) {
+		return fileName.substring(0, fileName.indexOf('.')).split("-")[0];
 	}
 	
 	private void loadManifestFile() throws IOException {
@@ -222,31 +348,34 @@ public class AddOn  {
 		if (file.exists()) {
 			// Might not exist in the tests
 			try (ZipFile zip = new ZipFile(file)) {
-				ZipEntry zapAddOnEntry = zip.getEntry("ZapAddOn.xml");
-				if (zapAddOnEntry != null) {
-					try (InputStream zis = zip.getInputStream(zapAddOnEntry)) {
-						ZapAddOnXmlFile zapAddOnXml = new ZapAddOnXmlFile(zis);
+				ZipEntry zapAddOnEntry = zip.getEntry(MANIFEST_FILE_NAME);
+				if (zapAddOnEntry == null) {
+					throw new IOException("Add-on does not have the " + MANIFEST_FILE_NAME + " file.");
+				}
 
-						this.name = zapAddOnXml.getName();
-						this.version = zapAddOnXml.getVersion();
-						this.description = zapAddOnXml.getDescription();
-						this.changes = zapAddOnXml.getChanges();
-						this.author = zapAddOnXml.getAuthor();
-						this.notBeforeVersion = zapAddOnXml.getNotBeforeVersion();
-						this.notFromVersion = zapAddOnXml.getNotFromVersion();
-						this.dependencies = zapAddOnXml.getDependencies();
+				try (InputStream zis = zip.getInputStream(zapAddOnEntry)) {
+					ZapAddOnXmlFile zapAddOnXml = new ZapAddOnXmlFile(zis);
 
-						this.ascanrules = zapAddOnXml.getAscanrules();
-						this.extensions = zapAddOnXml.getExtensions();
-						this.extensionsWithDeps = zapAddOnXml.getExtensionsWithDeps();
-						this.files = zapAddOnXml.getFiles();
-						this.pscanrules = zapAddOnXml.getPscanrules();
+					this.name = zapAddOnXml.getName();
+					this.version = zapAddOnXml.getVersion();
+					this.semVer = zapAddOnXml.getSemVer();
+					this.status = AddOn.Status.valueOf(zapAddOnXml.getStatus());
+					this.description = zapAddOnXml.getDescription();
+					this.changes = zapAddOnXml.getChanges();
+					this.author = zapAddOnXml.getAuthor();
+					this.notBeforeVersion = zapAddOnXml.getNotBeforeVersion();
+					this.notFromVersion = zapAddOnXml.getNotFromVersion();
+					this.dependencies = zapAddOnXml.getDependencies();
 
-						this.addOnClassnames = zapAddOnXml.getAddOnClassnames();
+					this.ascanrules = zapAddOnXml.getAscanrules();
+					this.extensions = zapAddOnXml.getExtensions();
+					this.extensionsWithDeps = zapAddOnXml.getExtensionsWithDeps();
+					this.files = zapAddOnXml.getFiles();
+					this.pscanrules = zapAddOnXml.getPscanrules();
 
-						hasZapAddOnEntry = true;
-					}
+					this.addOnClassnames = zapAddOnXml.getAddOnClassnames();
 
+					hasZapAddOnEntry = true;
 				}
 			}
 		}
@@ -259,7 +388,7 @@ public class AddOn  {
 	 * <p>
 	 * The given {@code SubnodeConfiguration} must have a {@code XPathExpressionEngine} installed.
 	 * <p>
-	 * The {@code ZapAddOn.xml} ZIP file entry is read, if the add-on file exists locally.
+	 * The {@value #MANIFEST_FILE_NAME} ZIP file entry is read, if the add-on file exists locally.
 	 * 
 	 * @param id the id of the add-on
 	 * @param baseDir the base directory where the add-on is located
@@ -274,10 +403,10 @@ public class AddOn  {
 		this.name = addOnData.getName();
 		this.description = addOnData.getDescription();
 		this.author = addOnData.getAuthor();
-		this.fileVersion = addOnData.getPackageVersion();
 		this.dependencies = addOnData.getDependencies();
 		this.extensionsWithDeps = addOnData.getExtensionsWithDeps();
 		this.version = addOnData.getVersion();
+		this.semVer = addOnData.getSemVer();
 		this.status = AddOn.Status.valueOf(addOnData.getStatus());
 		this.changes = addOnData.getChanges();
 		this.url = new URL(addOnData.getUrl());
@@ -323,18 +452,39 @@ public class AddOn  {
 		this.description = description;
 	}
 	
+	/**
+	 * Gets the file version of the add-on.
+	 *
+	 * @return the file version.
+	 * @deprecated (2.7.0) Use {@link #getVersion()} instead.
+	 */
+	@Deprecated
 	public int getFileVersion() {
-		return fileVersion;
+		return getVersion().getMajorVersion();
 	}
 
 	/**
 	 * Gets the semantic version of this add-on.
+	 * <p>
+	 * Since 2.7.0, for add-ons that use just an integer as the version it's appended ".0.0", for example, for
+	 * version {@literal 14} it returns the version {@literal 14.0.0}.
 	 *
-	 * @return the semantic version of the add-on, or {@code null} if none
+	 * @return the semantic version of the add-on, since 2.7.0, never {@code null}.
 	 * @since 2.4.0
 	 */
 	public Version getVersion() {
 		return version;
+	}
+
+	/**
+	 * Gets the semantic version declared in the manifest file.
+	 * <p>
+	 * To be replaced by {@link #getVersion()}.
+	 *
+	 * @return the semantic version declared in the manifest file, might be {@code null}.
+	 */
+	Version getSemVer() {
+		return semVer;
 	}
 
 	public Status getStatus() {
@@ -353,6 +503,25 @@ public class AddOn  {
 		this.changes = changes;
 	}
 
+	/**
+	 * Gets the normalised file name of the add-on.
+	 * <p>
+	 * Should be used when copying the file from an "unknown" source (e.g. manually installed).
+	 *
+	 * @return the normalised file name.
+	 * @since 2.6.0
+	 * @see #getFile()
+	 */
+	public String getNormalisedFileName() {
+		return getId() + "-" + getVersion() + FILE_EXTENSION;
+	}
+
+	/**
+	 * Gets the file of the add-on.
+	 *
+	 * @return the file of the add-on.
+	 * @see #getNormalisedFileName()
+	 */
 	public File getFile() {
 		return file;
 	}
@@ -418,7 +587,7 @@ public class AddOn  {
 					this.loadManifestFile();
 				} catch (IOException e) {
 					if (logger.isDebugEnabled()) {
-						logger.debug("Failed to read the ZapAddOn.xml file of " + id + ":", e);
+						logger.debug("Failed to read the " + AddOn.MANIFEST_FILE_NAME + " file of " + id + ":", e);
 					}
 				}
 			}
@@ -730,7 +899,7 @@ public class AddOn  {
 		if (! this.isSameAddOn(addOn)) {
 			throw new IllegalArgumentException("Different addons: " + this.getId() + " != " + addOn.getId());
 		}
-		if (this.getFileVersion() > addOn.getFileVersion()) {
+		if (this.getVersion().compareTo(addOn.getVersion()) > 0) {
 			return true;
 		}
 		return this.getStatus().ordinal() > addOn.getStatus().ordinal();
@@ -738,9 +907,9 @@ public class AddOn  {
 	
 	/**
 	 * @deprecated (2.4.0) Use {@link #calculateRunRequirements(Collection)} instead. Returns {@code false}.
+	 * @return {@code false} always.
 	 */
 	@Deprecated
-	@SuppressWarnings("javadoc")
 	public boolean canLoad() {
 		return false;
 	}
@@ -861,25 +1030,9 @@ public class AddOn  {
 					return;
 				}
 
-				if (dependency.getNotBeforeVersion() > -1 && addOnDep.fileVersion < dependency.getNotBeforeVersion()) {
-					requirements.setIssue(
-					        BaseRunRequirements.DependencyIssue.PACKAGE_VERSION_NOT_BEFORE,
-							addOnDep,
-							Integer.valueOf(dependency.getNotBeforeVersion()));
-					return;
-				}
-
-				if (dependency.getNotFromVersion() > -1 && addOnDep.fileVersion > dependency.getNotFromVersion()) {
-					requirements.setIssue(
-					        BaseRunRequirements.DependencyIssue.PACKAGE_VERSION_NOT_FROM,
-							addOnDep,
-							Integer.valueOf(dependency.getNotFromVersion()));
-					return;
-				}
-
-				if (!dependency.getSemVer().isEmpty()) {
-					if (addOnDep.version == null || !addOnDep.version.matches(dependency.getSemVer())) {
-						requirements.setIssue(BaseRunRequirements.DependencyIssue.VERSION, addOnDep, dependency.getSemVer());
+				if (!dependency.getVersion().isEmpty()) {
+					if (!versionMatches(addOnDep, dependency)) {
+						requirements.setIssue(BaseRunRequirements.DependencyIssue.VERSION, addOnDep, dependency.getVersion());
 						return;
 					}
 				}
@@ -925,43 +1078,13 @@ public class AddOn  {
                 continue;
             }
 
-            if (dependency.getNotBeforeVersion() > -1 && addOnDep.fileVersion < dependency.getNotBeforeVersion()) {
-                if (addOn.hasOnlyOneExtensionWithDependencies()) {
-                    requirements.setIssue(
-                            BaseRunRequirements.DependencyIssue.PACKAGE_VERSION_NOT_BEFORE,
-                            addOnDep,
-                            Integer.valueOf(dependency.getNotBeforeVersion()));
-                    return;
-                }
-                extensionRequirements.setIssue(
-                        BaseRunRequirements.DependencyIssue.PACKAGE_VERSION_NOT_BEFORE,
-                        addOnDep,
-                        Integer.valueOf(dependency.getNotBeforeVersion()));
-                continue;
-            }
-
-            if (dependency.getNotFromVersion() > -1 && addOnDep.fileVersion > dependency.getNotFromVersion()) {
-                if (addOn.hasOnlyOneExtensionWithDependencies()) {
-                    requirements.setIssue(
-                            BaseRunRequirements.DependencyIssue.PACKAGE_VERSION_NOT_FROM,
-                            addOnDep,
-                            Integer.valueOf(dependency.getNotFromVersion()));
-                    return;
-                }
-                extensionRequirements.setIssue(
-                        BaseRunRequirements.DependencyIssue.PACKAGE_VERSION_NOT_FROM,
-                        addOnDep,
-                        Integer.valueOf(dependency.getNotFromVersion()));
-                continue;
-            }
-
-            if (!dependency.getSemVer().isEmpty()) {
-                if (addOnDep.version == null || !addOnDep.version.matches(dependency.getSemVer())) {
+            if (!dependency.getVersion().isEmpty()) {
+                if (!versionMatches(addOnDep, dependency)) {
                     if (addOn.hasOnlyOneExtensionWithDependencies()) {
-                        requirements.setIssue(BaseRunRequirements.DependencyIssue.VERSION, addOnDep, dependency.getSemVer());
+                        requirements.setIssue(BaseRunRequirements.DependencyIssue.VERSION, addOnDep, dependency.getVersion());
                         return;
                     }
-                    extensionRequirements.setIssue(BaseRunRequirements.DependencyIssue.VERSION, addOnDep, dependency.getSemVer());
+                    extensionRequirements.setIssue(BaseRunRequirements.DependencyIssue.VERSION, addOnDep, dependency.getVersion());
                     continue;
                 }
             }
@@ -1048,24 +1171,33 @@ public class AddOn  {
     private static boolean dependsOn(List<AddOnDep> dependencies, AddOn addOn) {
         for (AddOnDep dependency : dependencies) {
             if (dependency.getId().equals(addOn.id)) {
-                if (dependency.getNotBeforeVersion() > -1 && addOn.fileVersion < dependency.getNotBeforeVersion()) {
-                    return false;
-                }
-
-                if (dependency.getNotFromVersion() > -1 && addOn.fileVersion > dependency.getNotFromVersion()) {
-                    return false;
-                }
-
-                if (!dependency.getSemVer().isEmpty()) {
-                    if (addOn.version == null) {
-                        return false;
-                    } else if (!addOn.version.matches(dependency.getSemVer())) {
-                        return false;
-                    }
+                if (!dependency.getVersion().isEmpty()) {
+                    return versionMatches(addOn, dependency);
                 }
                 return true;
             }
         }
+        return false;
+    }
+
+    /**
+     * Tells whether or not the given add-on version matches the one required by the dependency.
+     * <p>
+     * This methods is required to also check the {@code semVer} of the add-on, once removed it can match the version directly.
+     *
+     * @param addOn the add-on to check
+     * @param dependency the dependency
+     * @return {@code true} if the version matches, {@code false} otherwise.
+     */
+    private static boolean versionMatches(AddOn addOn, AddOnDep dependency) {
+        if (addOn.version.matches(dependency.getVersion())) {
+            return true;
+        }
+
+        if (addOn.semVer != null && addOn.semVer.matches(dependency.getVersion())) {
+            return true;
+        }
+
         return false;
     }
 
@@ -1232,10 +1364,7 @@ public class AddOn  {
 	public String toString() {
 		StringBuilder strBuilder = new StringBuilder();
 		strBuilder.append("[id=").append(id);
-		strBuilder.append(", fileVersion=").append(fileVersion);
-		if (version != null) {
-			strBuilder.append(", version=").append(version);
-		}
+		strBuilder.append(", version=").append(version);
 		strBuilder.append(']');
 
 		return strBuilder.toString();
@@ -1246,13 +1375,12 @@ public class AddOn  {
 		final int prime = 31;
 		int result = 1;
 		result = prime * result + ((id == null) ? 0 : id.hashCode());
-		result = prime * result + fileVersion;
-		result = prime * result + ((version == null) ? 0 : version.hashCode());
+		result = prime * result + version.hashCode();
 		return result;
 	}
 
 	/**
-	 * Two add-ons are considered equal if both add-ons have the same ID, file version and semantic version.
+	 * Two add-ons are considered equal if both add-ons have the same ID and version.
 	 */
 	@Override
 	public boolean equals(Object obj) {
@@ -1273,17 +1401,7 @@ public class AddOn  {
 		} else if (!id.equals(other.id)) {
 			return false;
 		}
-		if (fileVersion != other.fileVersion) {
-			return false;
-		}
-		if (version == null) {
-			if (other.version != null) {
-				return false;
-			}
-		} else if (!version.equals(other.version)) {
-			return false;
-		}
-		return true;
+		return version.equals(other.version);
 	}
 
 	public static abstract class BaseRunRequirements {
@@ -1323,18 +1441,24 @@ public class AddOn  {
 			 * The dependency found has a older version than the version required.
 			 * <p>
 			 * Issue details contain the instance of the {@code AddOn} and the required version.
+			 * 
+			 * @deprecated (2.7.0) No longer in use. It should be used just {@link #VERSION}. 
 			 */
+			@Deprecated
 			PACKAGE_VERSION_NOT_BEFORE,
 
 			/**
 			 * The dependency found has a newer version than the version required.
 			 * <p>
 			 * Issue details contain the instance of the {@code AddOn} and the required version.
+			 * 
+			 * @deprecated (2.7.0) No longer in use. It should be used just {@link #VERSION}.
 			 */
+			@Deprecated
 			PACKAGE_VERSION_NOT_FROM,
 
 			/**
-			 * The dependency found has a different semantic version.
+			 * The dependency found has a different version.
 			 * <p>
 			 * Issue details contain the instance of the {@code AddOn} and the required version.
 			 */

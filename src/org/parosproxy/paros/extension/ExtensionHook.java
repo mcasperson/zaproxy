@@ -28,6 +28,9 @@
 // ZAP: 2016/04/08 Allow to add ContextDataFactory
 // ZAP: 2016/05/30 Allow to add AddOnInstallationStatusListener
 // ZAP: 2016/05/30 Issue 2494: ZAP Proxy is not showing the HTTP CONNECT Request in history tab
+// ZAP: 2016/08/18 Allow to add ApiImplementor
+// ZAP: 2017/07/25 Allow to add HttpSenderListener.
+// ZAP: 2017/11/23 Add an add method for OverrideMessageProxyListener.
 
 package org.parosproxy.paros.extension;
 
@@ -44,8 +47,10 @@ import org.parosproxy.paros.core.scanner.ScannerHook;
 import org.parosproxy.paros.model.Model;
 import org.zaproxy.zap.PersistentConnectionListener;
 import org.zaproxy.zap.extension.AddonFilesChangedListener;
+import org.zaproxy.zap.extension.api.ApiImplementor;
 import org.zaproxy.zap.extension.AddOnInstallationStatusListener;
 import org.zaproxy.zap.model.ContextDataFactory;
+import org.zaproxy.zap.network.HttpSenderListener;
 import org.zaproxy.zap.view.SiteMapListener;
 
 
@@ -57,7 +62,16 @@ public class ExtensionHook {
     private Vector<OptionsChangedListener> optionsListenerList = new Vector<>();
 
     private Vector<ProxyListener> proxyListenerList = new Vector<>();
-    private List<OverrideMessageProxyListener> overrideMessageProxyListenersList = new ArrayList<>();
+
+    /**
+     * The {@link OverrideMessageProxyListener}s added to this extension hook.
+     * <p>
+     * Lazily initialised.
+     * 
+     * @see #addOverrideMessageProxyListener(OverrideMessageProxyListener)
+     * @see #getOverrideMessageProxyListenerList()
+     */
+    private List<OverrideMessageProxyListener> overrideMessageProxyListenersList;
 
     /**
      * The {@link ConnectRequestProxyListener}s added to this extension hook.
@@ -96,6 +110,26 @@ public class ExtensionHook {
      * @see #getAddOnInstallationStatusListeners()
      */
     private List<AddOnInstallationStatusListener> addOnInstallationStatusListeners;
+
+    /**
+     * The {@link ApiImplementor}s added to this extension hook.
+     * <p>
+     * Lazily initialised.
+     * 
+     * @see #addApiImplementor(ApiImplementor)
+     * @see #getApiImplementors()
+     */
+    private List<ApiImplementor> apiImplementors;
+
+    /**
+     * The {@link HttpSenderListener}s added to this extension hook.
+     * <p>
+     * Lazily initialised.
+     * 
+     * @see #addHttpSenderListener(HttpSenderListener)
+     * @see #getHttpSenderListeners()
+     */
+    private List<HttpSenderListener> httpSenderListeners;
     
     private ViewDelegate view = null;
     private CommandLineArgument[] arg = new CommandLineArgument[0];
@@ -290,7 +324,35 @@ public class ExtensionHook {
 		return addonFilesChangedListenerList;
 	}
 
+    /**
+     * Adds the given {@code overrideMessageProxyListener} to the extension hook, to be later added to the
+     * {@link org.parosproxy.paros.control.Proxy Proxy}.
+     * <p>
+     * By default, the {@code OverrideMessageProxyListener}s added to this extension hook are removed from the {@code Proxy}
+     * when the extension is unloaded.
+     *
+     * @param overrideMessageProxyListener the {@code OverrideMessageProxyListener} that will be added to the {@code Proxy}
+     * @throws IllegalArgumentException if the given {@code overrideMessageProxyListener} is {@code null}.
+     * @since 2.7.0
+     */
+    public void addOverrideMessageProxyListener(OverrideMessageProxyListener overrideMessageProxyListener) {
+        getOverrideMessageProxyListenerList().add(overrideMessageProxyListener);
+    }
+
+    /**
+     * Gets the {@link OverrideMessageProxyListener}s added to this hook.
+     * <p>
+     * While it's possible to add the listener with this method it's not recommended, use
+     * {@link #addOverrideMessageProxyListener(OverrideMessageProxyListener)} whenever possible. The accessibility of this
+     * method might change in a future version (to package access).
+     *
+     * @return a {@code List} containing the added {@code OverrideMessageProxyListener}s, never {@code null}.
+     * @since 2.3.0
+     */
     public List<OverrideMessageProxyListener> getOverrideMessageProxyListenerList() {
+        if (overrideMessageProxyListenersList == null) {
+            overrideMessageProxyListenersList = new ArrayList<>();
+        }
         return overrideMessageProxyListenersList;
     }
 
@@ -320,5 +382,75 @@ public class ExtensionHook {
             return Collections.emptyList();
         }
         return Collections.unmodifiableList(contextDataFactories);
+    }
+
+    /**
+     * Adds the given {@code apiImplementor} to the extension hook, to be later added to the
+     * {@link org.zaproxy.zap.extension.api.API API}.
+     * <p>
+     * By default, the {@code ApiImplementor}s added to this extension hook are removed from the {@code API} when the extension
+     * is unloaded.
+     *
+     * @param apiImplementor the ApiImplementor that will be added to the ZAP API
+     * @throws IllegalArgumentException if the given {@code apiImplementor} is {@code null}.
+     * @since 2.6.0
+     */
+    public void addApiImplementor(ApiImplementor apiImplementor) {
+        if (apiImplementor == null) {
+            throw new IllegalArgumentException("Parameter apiImplementor must not be null.");
+        }
+
+        if (apiImplementors == null) {
+            apiImplementors = new ArrayList<>();
+        }
+        apiImplementors.add(apiImplementor);
+    }
+
+    /**
+     * Gets the {@link ApiImplementor}s added to this hook.
+     *
+     * @return an unmodifiable {@code List} containing the added {@code ApiImplementor}s, never {@code null}.
+     * @since 2.6.0
+     */
+    List<ApiImplementor> getApiImplementors() {
+        if (apiImplementors == null) {
+            return Collections.emptyList();
+        }
+        return Collections.unmodifiableList(apiImplementors);
+    }
+
+    /**
+     * Adds the given {@code httpSenderListener} to the extension hook, to be later added to the
+     * {@link org.parosproxy.paros.network.HttpSender HttpSender}.
+     * <p>
+     * By default, the {@code HttpSenderListener}s added to this extension hook are removed from the {@code HttpSender} when the
+     * extension is unloaded.
+     *
+     * @param httpSenderListener the HttpSenderListener that will be added to the {@code HttpSender}
+     * @throws IllegalArgumentException if the given {@code httpSenderListener} is {@code null}.
+     * @since 2.7.0
+     */
+    public void addHttpSenderListener(HttpSenderListener httpSenderListener) {
+        if (httpSenderListener == null) {
+            throw new IllegalArgumentException("Parameter httpSenderListener must not be null.");
+        }
+
+        if (httpSenderListeners == null) {
+            httpSenderListeners = new ArrayList<>();
+        }
+        httpSenderListeners.add(httpSenderListener);
+    }
+
+    /**
+     * Gets the {@link HttpSenderListener}s added to this hook.
+     *
+     * @return an unmodifiable {@code List} containing the added {@code HttpSenderListener}s, never {@code null}.
+     * @since 2.7.0
+     */
+    List<HttpSenderListener> getHttpSenderListeners() {
+        if (httpSenderListeners == null) {
+            return Collections.emptyList();
+        }
+        return Collections.unmodifiableList(httpSenderListeners);
     }
 }

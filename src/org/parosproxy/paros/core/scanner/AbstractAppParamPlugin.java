@@ -32,6 +32,7 @@
 // ZAP: 2014/02/09 Add custom input vector scripting capabilities
 // ZAP: 2014/08/14 Issue 1279: Active scanner excluded parameters not working when "Where" is "Any"
 // ZAP: 2016/06/15 Add VariantHeader based on the current scan options
+// ZAP: 2017/10/31 Use ExtensionLoader.getExtension(Class).
 package org.parosproxy.paros.core.scanner;
 
 import java.util.ArrayList;
@@ -68,6 +69,11 @@ public abstract class AbstractAppParamPlugin extends AbstractAppPlugin {
                 listVariant.add(new VariantODataIdQuery());
                 listVariant.add(new VariantODataFilterQuery());
             }
+            
+            if ((targets & ScannerParam.TARGET_URLPATH) == 0) {
+            	//If we're not already doing URLPath we should do DDN when doing QueryString
+            	listVariant.add(new VariantDdnPath());
+            }
         }
 
         // Then check POST data target configuration and RPC enabled methods
@@ -76,7 +82,7 @@ public abstract class AbstractAppParamPlugin extends AbstractAppPlugin {
 
             // ZAP: To handle Multipart Form-Data POST requests
             if ((enabledRPC & ScannerParam.RPC_MULTIPART) != 0) {
-                listVariant.add(new VariantMultipartFormQuery());
+                listVariant.add(new VariantMultipartFormParameters());
             }
 
             // ZAP: To handle XML based POST requests
@@ -258,33 +264,38 @@ public abstract class AbstractAppParamPlugin extends AbstractAppPlugin {
     }
 
     /**
-     * Set the paramter into the current message. The position will be handled
-     * by the Abstract class. If both param and value is null, the current
-     * parameter will be removed.
+     * Sets the parameter into the given {@code message}. If both parameter name and value are {@code null}, the parameter will
+     * be removed.
      *
-     * @param msg
-     * @param param
-     * @param value
-     * @return
+     * @param message the message that will be changed
+     * @param param the name of the parameter
+     * @param value the value of the parameter
+     * @return the parameter set
+     * @see #setEscapedParameter(HttpMessage, String, String)
      */
-    protected String setParameter(HttpMessage msg, String param, String value) {
-        return variant.setParameter(msg, originalPair, param, value);
+    protected String setParameter(HttpMessage message, String param, String value) {
+        return variant.setParameter(message, originalPair, param, value);
     }
 
     /**
-     *
-     * @param msg
-     * @param param
-     * @param value
-     * @return
+     * Sets the parameter into the given {@code message}. If both parameter name and value are {@code null}, the parameter will
+     * be removed.
+     * <p>
+     * The value is expected to be properly encoded/escaped.
+     * 
+     * @param message the message that will be changed
+     * @param param the name of the parameter
+     * @param value the value of the parameter
+     * @return the parameter set
+     * @see #setParameter(HttpMessage, String, String)
      */
-    protected String setEscapedParameter(HttpMessage msg, String param, String value) {
-        return variant.setEscapedParameter(msg, originalPair, param, value);
+    protected String setEscapedParameter(HttpMessage message, String param, String value) {
+        return variant.setEscapedParameter(message, originalPair, param, value);
     }
 
     private ExtensionScript getExtension() {
         if (extension == null) {
-            extension = (ExtensionScript) Control.getSingleton().getExtensionLoader().getExtension(ExtensionScript.NAME);
+            extension = Control.getSingleton().getExtensionLoader().getExtension(ExtensionScript.class);
         }
         return extension;
     }

@@ -19,7 +19,6 @@
  */
 package org.zaproxy.zap.view.popup;
 
-import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -50,7 +49,6 @@ public class PopupMenuItemContextDataDriven extends PopupMenuItemSiteNodeContain
         super("DataDrivenNodeX", true);
     }
 
-    /**/
     @Override
     public String getParentMenuName() {
         return Constant.messages.getString("context.flag.popup");
@@ -100,8 +98,7 @@ public class PopupMenuItemContextDataDriven extends PopupMenuItemSiteNodeContain
 
     protected ExtensionPopupMenuItem createPopupDataDrivenNodeMenu(Context context) {
         return new PopupMenuItemContextDataDrivenNode(context,
-        		MessageFormat.format(
-        				Constant.messages.getString("context.flag.popup.datadriven"), context.getName()));
+        				Constant.messages.getString("context.flag.popup.datadriven", context.getName()));
     }
 
     @Override

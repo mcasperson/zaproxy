@@ -7,9 +7,6 @@ import org.zaproxy.zap.users.User;
 
 public class DialogModifyUser extends DialogAddUser {
 
-	/**
-	 * 
-	 */
 	private static final long serialVersionUID = 7828871270310672334L;
 	private static final String DIALOG_TITLE = Constant.messages
 			.getString("users.dialog.modify.title");
@@ -29,7 +26,9 @@ public class DialogModifyUser extends DialogAddUser {
 
 	@Override
 	protected void init() {
-		log.info("Initializing modify user dialog for: " + user);
+		if (log.isDebugEnabled()) {
+			log.debug("Initializing modify user dialog for: " + user);
+		}
 		getNameTextField().setText(user.getName());
 		getEnabledCheckBox().setSelected(user.isEnabled());
 

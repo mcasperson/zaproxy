@@ -33,10 +33,7 @@ import org.parosproxy.paros.db.DatabaseException;
 import org.parosproxy.paros.db.RecordContext;
 import org.parosproxy.paros.extension.ExtensionAdaptor;
 import org.parosproxy.paros.extension.ExtensionHook;
-import org.parosproxy.paros.model.Model;
 import org.parosproxy.paros.model.Session;
-import org.zaproxy.zap.extension.api.API;
-import org.zaproxy.zap.extension.api.ApiImplementor;
 import org.zaproxy.zap.model.Context;
 import org.zaproxy.zap.model.ContextDataFactory;
 import org.zaproxy.zap.view.AbstractContextPropertiesPanel;
@@ -75,20 +72,28 @@ public class ExtensionAuthorization extends ExtensionAdaptor implements ContextP
 	}
 
 	@Override
+	public boolean supportsDb(String type) {
+		return true;
+	}
+
+	@Override
+	public String getUIName() {
+		return Constant.messages.getString("autorization.name");
+	}
+	
+	@Override
 	public void hook(ExtensionHook extensionHook) {
 		super.hook(extensionHook);
 
 		// Register this where needed
-		Model.getSingleton().addContextDataFactory(this);
+		extensionHook.addContextDataFactory(this);
 
 		if (getView() != null) {
 			// Factory for generating Session Context UserAuth panels
-			getView().addContextPanelFactory(this);
+			extensionHook.getHookView().addContextPanelFactory(this);
 		}
 
-		// Register the api
-		ApiImplementor api = new AuthorizationAPI();
-		API.getInstance().registerApiImplementor(api);
+		extensionHook.addApiImplementor(new AuthorizationAPI());
 	}
 
 	@Override

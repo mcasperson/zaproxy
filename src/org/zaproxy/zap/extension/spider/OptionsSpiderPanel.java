@@ -75,6 +75,8 @@ public class OptionsSpiderPanel extends AbstractParamPanel {
 	private JSlider sliderMaxDepth = null;
 	private JSlider sliderThreads = null;
 	private ZapNumberSpinner durationNumberSpinner = null;
+	private ZapNumberSpinner maxChildrenNumberSpinner;
+	private ZapNumberSpinner maxParseSizeBytesNumberSpinner;
 	private JCheckBox chkPostForm = null;
 	private JCheckBox chkProcessForm = null;
 	private JCheckBox parseComments = null;
@@ -84,6 +86,7 @@ public class OptionsSpiderPanel extends AbstractParamPanel {
 	private JCheckBox parseGit = null;
 	private JCheckBox handleODataSpecificParameters = null;
 	private JCheckBox chkSendRefererHeader;
+	private JCheckBox chkAcceptCookies;
 	private DomainsAlwaysInScopeMultipleOptionsPanel domainsAlwaysInScopePanel;
 	private DomainsAlwaysInScopeTableModel domainsAlwaysInScopeTableModel;
 
@@ -153,10 +156,21 @@ public class OptionsSpiderPanel extends AbstractParamPanel {
 			innerPanel.add(noThreadsLabel, gbc);
 			innerPanel.add(getSliderThreads(), gbc);
 			
-			JPanel maxDurPanel = new JPanel(new GridBagLayout());
-			maxDurPanel.add(maxDuration, LayoutHelper.getGBC(0, 0, 1, 1.0D));
-			maxDurPanel.add(getDurationNumberSpinner(), LayoutHelper.getGBC(1, 0, 1, 1.0D));
-			innerPanel.add(maxDurPanel, gbc);
+			JPanel inlineOptionsPanel = new JPanel(new GridBagLayout());
+			inlineOptionsPanel.add(maxDuration, LayoutHelper.getGBC(0, 0, 1, 1.0D));
+			inlineOptionsPanel.add(getDurationNumberSpinner(), LayoutHelper.getGBC(1, 0, 1, 1.0D));
+
+			inlineOptionsPanel.add(
+					new JLabel(Constant.messages.getString("spider.options.label.maxChildren")),
+					LayoutHelper.getGBC(0, 1, 1, 1.0D));
+			inlineOptionsPanel.add(getMaxChildrenNumberSpinner(), LayoutHelper.getGBC(1, 1, 1, 1.0D));
+
+			inlineOptionsPanel.add(
+					new JLabel(Constant.messages.getString("spider.options.label.maxParseSizeBytes")),
+					LayoutHelper.getGBC(0, 2, 1, 1.0D));
+			inlineOptionsPanel.add(getMaxParseSizeBytesNumberSpinner(), LayoutHelper.getGBC(1, 2, 1, 1.0D));
+
+			innerPanel.add(inlineOptionsPanel, gbc);
 			
 			innerPanel.add(domainsLabel, gbc);
 			gbc.fill = GridBagConstraints.BOTH;
@@ -165,6 +179,7 @@ public class OptionsSpiderPanel extends AbstractParamPanel {
 			gbc.fill = GridBagConstraints.HORIZONTAL;
 			gbc.weighty = 0;
 			innerPanel.add(getChkSendRefererHeader(), gbc);
+			innerPanel.add(getChkAcceptCookies(), gbc);
 			innerPanel.add(handleParametersLabel, gbc);
 			innerPanel.add(getComboHandleParameters(), gbc);
 			innerPanel.add(getChkProcessForm(), gbc);
@@ -194,10 +209,13 @@ public class OptionsSpiderPanel extends AbstractParamPanel {
 		getSliderMaxDepth().setValue(param.getMaxDepth());
 		getSliderThreads().setValue(param.getThreadCount());
 		getDurationNumberSpinner().setValue(param.getMaxDuration());
+		getMaxChildrenNumberSpinner().setValue(param.getMaxChildren());
+		getMaxParseSizeBytesNumberSpinner().setValue(param.getMaxParseSizeBytes());
 		getDomainsAlwaysInScopeTableModel().setDomainsAlwaysInScope(param.getDomainsAlwaysInScope());
 		getDomainsAlwaysInScopePanel().setRemoveWithoutConfirmation(param.isConfirmRemoveDomainAlwaysInScope());
 		getChkProcessForm().setSelected(param.isProcessForm());
 		getChkSendRefererHeader().setSelected(param.isSendRefererHeader());
+		getChkAcceptCookies().setSelected(param.isAcceptCookies());
 		getChkPostForm().setSelected(param.isPostForm());
 		getChkParseComments().setSelected(param.isParseComments());
 		getChkParseRobotsTxt().setSelected(param.isParseRobotsTxt());
@@ -210,20 +228,18 @@ public class OptionsSpiderPanel extends AbstractParamPanel {
 	}
 
 	@Override
-	public void validateParam(Object obj) {
-		// no validation needed
-	}
-
-	@Override
 	public void saveParam(Object obj) throws Exception {
 		OptionsParam options = (OptionsParam) obj;
 		SpiderParam param = options.getParamSet(SpiderParam.class);
 		param.setMaxDepth(getSliderMaxDepth().getValue());
 		param.setThreadCount(getSliderThreads().getValue());
 		param.setMaxDuration(getDurationNumberSpinner().getValue());
+		param.setMaxChildren(getMaxChildrenNumberSpinner().getValue());
+		param.setMaxParseSizeBytes(getMaxParseSizeBytesNumberSpinner().getValue());
 		param.setDomainsAlwaysInScope(getDomainsAlwaysInScopeTableModel().getDomainsAlwaysInScope());
 		param.setConfirmRemoveDomainAlwaysInScope(getDomainsAlwaysInScopePanel().isRemoveWithoutConfirmation());
 		param.setSendRefererHeader(getChkSendRefererHeader().isSelected());
+		param.setAcceptCookies(getChkAcceptCookies().isSelected());
 		param.setProcessForm(getChkProcessForm().isSelected());
 		param.setPostForm(getChkPostForm().isSelected());
 		param.setParseComments(getChkParseComments().isSelected());
@@ -275,11 +291,32 @@ public class OptionsSpiderPanel extends AbstractParamPanel {
 		return durationNumberSpinner;
 	}
 
+	private ZapNumberSpinner getMaxChildrenNumberSpinner() {
+		if (maxChildrenNumberSpinner == null) {
+			maxChildrenNumberSpinner = new ZapNumberSpinner(0, 0, Integer.MAX_VALUE);
+		}
+		return maxChildrenNumberSpinner;
+	}
+
+	private ZapNumberSpinner getMaxParseSizeBytesNumberSpinner() {
+		if (maxParseSizeBytesNumberSpinner == null) {
+			maxParseSizeBytesNumberSpinner = new ZapNumberSpinner(0, 0, Integer.MAX_VALUE);
+		}
+		return maxParseSizeBytesNumberSpinner;
+	}
+
 	private JCheckBox getChkSendRefererHeader() {
 		if (chkSendRefererHeader == null) {
 			chkSendRefererHeader = new JCheckBox(Constant.messages.getString("spider.options.label.sendRefererHeader"));
 		}
 		return chkSendRefererHeader;
+	}
+
+	private JCheckBox getChkAcceptCookies() {
+		if (chkAcceptCookies == null) {
+			chkAcceptCookies = new JCheckBox(Constant.messages.getString("spider.options.label.acceptcookies"));
+		}
+		return chkAcceptCookies;
 	}
 
 	/**

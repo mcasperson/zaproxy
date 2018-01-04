@@ -21,13 +21,12 @@ package org.zaproxy.zap;
 
 import java.io.FileNotFoundException;
 
-import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
-import org.apache.log4j.varia.NullAppender;
 import org.parosproxy.paros.CommandLine;
 import org.parosproxy.paros.Constant;
 import org.parosproxy.paros.control.Control;
 import org.parosproxy.paros.model.Model;
+import org.zaproxy.zap.utils.ZapSupportUtils;
 
 /**
  * The bootstrap process for command line mode.
@@ -49,10 +48,7 @@ public class CommandLineBootstrap extends HeadlessBootstrap {
             return rc;
         }
 
-        // Turn off log4j
-        Logger.getRootLogger().removeAllAppenders();
-        Logger.getRootLogger().addAppender(new NullAppender());
-        Logger.getRootLogger().setLevel(Level.OFF);
+        logger.info(getStartingMessage());
 
         try {
             initModel();
@@ -65,7 +61,7 @@ public class CommandLineBootstrap extends HeadlessBootstrap {
             throw new RuntimeException(e);
         }
 
-        Control control = initControl(true);
+        Control control = initControl();
 
         warnAddOnsAndExtensionsNoLongerRunnable();
 
@@ -76,6 +72,9 @@ public class CommandLineBootstrap extends HeadlessBootstrap {
 
             } else if (getArgs().isReportVersion()) {
                 System.out.println(Constant.PROGRAM_VERSION);
+
+            } else if (getArgs().isDisplaySupportInfo()) {
+            	System.out.println(ZapSupportUtils.getAll(false));
 
             } else {
                 if (handleCmdLineSessionArgsSynchronously(control)) {

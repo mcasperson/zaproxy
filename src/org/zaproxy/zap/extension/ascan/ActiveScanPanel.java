@@ -19,7 +19,6 @@
  */
 package org.zaproxy.zap.extension.ascan;
 
-import java.awt.Event;
 import java.awt.EventQueue;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
@@ -37,16 +36,15 @@ import javax.swing.KeyStroke;
 
 import org.apache.log4j.Logger;
 import org.parosproxy.paros.Constant;
-import org.parosproxy.paros.control.Control;
 import org.parosproxy.paros.core.scanner.Alert;
 import org.parosproxy.paros.core.scanner.HostProcess;
 import org.parosproxy.paros.core.scanner.ScannerListener;
 import org.parosproxy.paros.network.HttpMessage;
 import org.parosproxy.paros.view.View;
-import org.zaproxy.zap.extension.alert.ExtensionAlert;
 import org.zaproxy.zap.model.ScanController;
 import org.zaproxy.zap.model.ScanListenner2;
 import org.zaproxy.zap.utils.DisplayUtils;
+import org.zaproxy.zap.utils.TableExportButton;
 import org.zaproxy.zap.view.ScanPanel2;
 import org.zaproxy.zap.view.table.HistoryReferencesTable;
 
@@ -82,16 +80,19 @@ public class ActiveScanPanel extends ScanPanel2<ActiveScan, ScanController<Activ
 	private JButton scanButton = null;
 	private JButton progressButton;
 	private JLabel numRequests;
+	private TableExportButton<HistoryReferencesTable> exportButton = null;
 
     /**
-     * @param extension
+     * Constructs an {@code ActiveScanPanel} with the given extension.
+     * 
+     * @param extension the active scan extension, to access options and start scans
      */
     public ActiveScanPanel(ExtensionActiveScan extension) {
     	// 'fire' icon
-        super("ascan", new ImageIcon(ActiveScanPanel.class.getResource("/resource/icon/16/093.png")), extension, null);
+        super("ascan", new ImageIcon(ActiveScanPanel.class.getResource("/resource/icon/16/093.png")), extension);
         this.extension = extension;
 		this.setDefaultAccelerator(KeyStroke.getKeyStroke(
-				KeyEvent.VK_A, Toolkit.getDefaultToolkit().getMenuShortcutKeyMask() | Event.ALT_MASK | Event.SHIFT_MASK, false));
+				KeyEvent.VK_A, Toolkit.getDefaultToolkit().getMenuShortcutKeyMask() | KeyEvent.ALT_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK, false));
 		this.setMnemonic(Constant.messages.getChar("ascan.panel.mnemonic"));
     }
 
@@ -108,6 +109,7 @@ public class ActiveScanPanel extends ScanPanel2<ActiveScan, ScanController<Activ
 			panelToolbar.add(new JToolBar.Separator(), getGBC(x++, 0));
 			panelToolbar.add(new JLabel(Constant.messages.getString("ascan.toolbar.requests.label")), getGBC(x++,0));
 			panelToolbar.add(getNumRequests(), getGBC(x++,0));
+			panelToolbar.add(getExportButton(), getGBC(x++,0));
 		}
 		return x;
 	}
@@ -173,6 +175,13 @@ public class ActiveScanPanel extends ScanPanel2<ActiveScan, ScanController<Activ
 			spp.setActiveScan(scan);
 			spp.setVisible(true);
 		}
+	}
+	
+	private TableExportButton<HistoryReferencesTable> getExportButton() {
+		if (exportButton == null) {
+			exportButton = new TableExportButton<>(getMessagesTable());
+		}
+		return exportButton;
 	}
 	
 	@Override
@@ -253,10 +262,7 @@ public class ActiveScanPanel extends ScanPanel2<ActiveScan, ScanController<Activ
 
 	@Override
 	public void alertFound(Alert alert) {
-		ExtensionAlert extAlert = (ExtensionAlert) Control.getSingleton().getExtensionLoader().getExtension(ExtensionAlert.NAME);
-		if (extAlert != null) {
-			extAlert.alertFound(alert, alert.getHistoryRef());
-		}
+		// Nothing to do, ActiveScanController (through ActiveScan) already raises the alerts.
 	}
 
 

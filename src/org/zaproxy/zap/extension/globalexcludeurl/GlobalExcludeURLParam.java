@@ -27,9 +27,9 @@ import org.apache.commons.configuration.ConversionException;
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.log4j.Logger;
 import org.parosproxy.paros.common.AbstractParam;
+import org.parosproxy.paros.model.Model;
 import org.zaproxy.zap.extension.api.ZapApiIgnore;
 
-/** TODO The GlobalExcludeURL functionality is currently alpha and subject to change.  */
 public class GlobalExcludeURLParam extends AbstractParam {
 
     private static final Logger logger = Logger.getLogger(GlobalExcludeURLParam.class);
@@ -110,7 +110,7 @@ public class GlobalExcludeURLParam extends AbstractParam {
 				"Site - Bing API queries",
 				"false"
 			}, {
-				"^https?://(safebrowsing-cache|sb-ssl|sb|safebrowsing\\.clients)\\.google\\.com",
+				"^https?://(safebrowsing-cache|sb-ssl|sb|safebrowsing\\.clients)\\.google\\.com/.*$",
 				"Site - Google malware detector updates",
 				"false"
 			}, {
@@ -118,7 +118,7 @@ public class GlobalExcludeURLParam extends AbstractParam {
 				"Site - Lastpass manager",
 				"false"
 			}, {
-				"^https?://(.*addons|au[0-9])\\.mozilla\\.(org|net|com)",
+				"^https?://(.*addons|aus[0-9])\\.mozilla\\.(org|net|com)/.*$",
 				"Site - Mozilla Firefox browser updates",
 				"false"
 			}, {
@@ -133,6 +133,22 @@ public class GlobalExcludeURLParam extends AbstractParam {
 			}, {
 				"^https?://clients2\\.google\\.com/service/update2/crx.*$",
 				"Site - Google Chrome extension updates",
+				"false"
+			}, {
+				"^https?://detectportal\\.firefox\\.com.*$",
+				"Site - Firefox captive portal detection",
+				"false"
+			}, {
+				"^https?://www\\.google-analytics\\.com.*$",
+				"Site - Google Analytics",
+				"false"
+			}, {
+				"^https?://ciscobinary\\.openh264\\.org.*$",
+				"Site - Firefox h264 codec download", // https://support.mozilla.org/t5/Firefox/Where-is-a-check-that-http-ciscobinary-openh264-org-openh264-is/m-p/1316497#M1005892
+				"false"
+			}, {
+				"^https?://fonts.*$",
+				"Site - Fonts CDNs such as fonts.gstatic.com, etc",
 				"false"
 			}
     	};
@@ -184,11 +200,7 @@ public class GlobalExcludeURLParam extends AbstractParam {
             }
         }
 
-        try {
-            this.confirmRemoveToken = getConfig().getBoolean(CONFIRM_REMOVE_TOKEN_KEY, true);
-        } catch (ConversionException e) {
-            logger.error("Error while loading the confirm remove token option: " + e.getMessage(), e);
-        }
+        this.confirmRemoveToken = getBoolean(CONFIRM_REMOVE_TOKEN_KEY, true);
     }
 
     public List<GlobalExcludeURLParamToken> getTokens() {
@@ -216,6 +228,9 @@ public class GlobalExcludeURLParam extends AbstractParam {
         
         enabledTokens.trimToSize();
         this.enabledTokensNames = enabledTokens;
+
+        // after saving, force the proxy to refresh the URL lists.
+        Model.getSingleton().getSession().forceGlobalExcludeURLRefresh();
     }
 
     public void addToken(String regex) {

@@ -21,13 +21,17 @@ package org.zaproxy.zap.view;
 
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.util.List;
 
 import javax.swing.ImageIcon;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultTreeCellRenderer;
 
 import org.apache.log4j.Logger;
+import org.parosproxy.paros.core.scanner.Alert;
 import org.parosproxy.paros.model.HistoryReference;
 import org.parosproxy.paros.model.SiteMap;
 import org.parosproxy.paros.model.SiteNode;
@@ -58,9 +62,13 @@ public class SiteMapTreeCellRenderer extends DefaultTreeCellRenderer {
 	private static Logger log = Logger.getLogger(SiteMapPanel.class);
 
 	private List<SiteMapListener> listeners;
+	private JPanel component; 
 
 	public SiteMapTreeCellRenderer(List<SiteMapListener> listeners) {
 		this.listeners = listeners;
+		this.component = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 2));
+		component.setOpaque(false);
+		this.putClientProperty("html.disable", Boolean.TRUE);
 	}
 
 	/**
@@ -71,6 +79,7 @@ public class SiteMapTreeCellRenderer extends DefaultTreeCellRenderer {
 			boolean sel, boolean expanded, boolean leaf, int row,
 			boolean hasFocus) {
 
+		component.removeAll();
 		SiteNode node = null;
 		if (value instanceof SiteNode) {
 			node = (SiteNode) value;
@@ -80,14 +89,15 @@ public class SiteMapTreeCellRenderer extends DefaultTreeCellRenderer {
 	        if( node.isFiltered()) {
 	        	// Hide the node
 	            setPreferredSize( new Dimension(0, 0) );
-	        } else {
-	            setPreferredSize(null);	// clears the prefered size, making the node visible
-	            super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+	            return this;
 	        }
+
+			setPreferredSize(null);	// clears the prefered size, making the node visible
+			super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
 
 			// folder / file icons with scope 'target' if relevant
 			if (node.isRoot()) {
-				setIcon(DisplayUtils.getScaledIcon(ROOT_ICON));	// 'World' icon
+				component.add(wrap(ROOT_ICON)); // 'World' icon
 			} else {
 				OverlayIcon icon;
 		        if (node.isDataDriven()) {
@@ -121,22 +131,44 @@ public class SiteMapTreeCellRenderer extends DefaultTreeCellRenderer {
 					// Add lock icon to site nodes with https
 					icon.add(LOCK_OVERLAY_ICON);
 				}
-				setIcon(DisplayUtils.getScaledIcon(icon));
+				
+				component.add(wrap(DisplayUtils.getScaledIcon(icon)));
+				
+				Alert alert = node.getHighestAlert();
+				if (alert != null) {
+					component.add(wrap(alert.getIcon()));
+				}
+
+				for (ImageIcon ci : node.getCustomIcons()){
+					component.add(wrap(DisplayUtils.getScaledIcon(ci)));
+				}
+				
 			}
+			setText(node.toString());
+			setIcon(null);
+			component.add(this);
 
 	        for (SiteMapListener listener : listeners) {
 	        	listener.onReturnNodeRendererComponent(this, leaf, node);
 	        }
+	        return component;
 		}
 
 		return this;
 	}
 	
+    private JLabel wrap (ImageIcon icon) {
+        JLabel label = new JLabel(icon);
+        label.setOpaque(false);
+        label.putClientProperty("html.disable", Boolean.TRUE);
+        return label;
+    }
+    
 	/**
-	 * Extract HttpMessage out of {@link SiteMap} node.
+	 * Extracts a HistoryReference out of {@link SiteMap} node.
 	 * 
-	 * @param value
-	 * @return
+	 * @param value the node
+	 * @return the {@code HistoryReference}, or {@code null} if it has none
 	 */
 	public HistoryReference getHistoryReferenceFromNode(Object value) {
 		SiteNode node = null;

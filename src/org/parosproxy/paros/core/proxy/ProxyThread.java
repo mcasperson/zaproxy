@@ -61,6 +61,19 @@
 // ZAP: 2016/04/29 Adjust exception logging levels and log when timeouts happen
 // ZAP: 2016/05/30 Issue 2494: ZAP Proxy is not showing the HTTP CONNECT Request in history tab
 // ZAP: 2016/06/13 Remove all unsupported encodings (instead of just some)
+// ZAP: 2016/09/22 JavaDoc tweaks
+// ZAP: 2016/11/28 Correct proxy errors' Content-Length value.
+// ZAP: 2016/12/07 Allow to extend the ProxyThread and use a custom HttpSender
+// ZAP: 2016/12/23 Make SocketTimeoutException less verbose for general use
+// ZAP: 2017/02/08 Differentiate client read timeout after CONNECT, from server read timeout.
+// ZAP: 2017/02/08 Change CONNECT response to contain just the status line, helps Android emulator consume the response.
+// ZAP: 2017/02/20 Issue 2699: Make SSLException handling more user friendly
+// ZAP: 2017/02/23  Issue 3227: Limit API access to whitelisted IP addresses
+// ZAP: 2017/03/15 Disable API by default
+// ZAP: 2017/03/26 Check the public address when behind NAT.
+// ZAP: 2017/06/12 Do not notify listeners when request is excluded.
+// ZAP: 2017/09/22 Check if first message received is a SSL/TLS handshake and tweak exception message.
+// ZAP: 2017/10/02 Improve error handling when checking if SSL/TLS handshake.
 
 package org.parosproxy.paros.core.proxy;
 
@@ -74,6 +87,8 @@ import java.net.NetworkInterface;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Vector;
 import java.util.regex.Pattern;
@@ -81,9 +96,13 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
 
+import javax.net.ssl.SSLException;
+
 import org.apache.commons.httpclient.HttpException;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.log4j.Logger;
+import org.ice4j.TransportAddress;
+import org.ice4j.ice.harvest.AwsCandidateHarvester;
 import org.parosproxy.paros.Constant;
 import org.parosproxy.paros.db.RecordHistory;
 import org.parosproxy.paros.model.Model;
@@ -94,6 +113,7 @@ import org.parosproxy.paros.network.HttpMalformedHeaderException;
 import org.parosproxy.paros.network.HttpMessage;
 import org.parosproxy.paros.network.HttpOutputStream;
 import org.parosproxy.paros.network.HttpRequestHeader;
+import org.parosproxy.paros.network.HttpResponseHeader;
 import org.parosproxy.paros.network.HttpSender;
 import org.parosproxy.paros.network.HttpUtil;
 import org.parosproxy.paros.security.MissingRootCertificateException;
@@ -101,12 +121,13 @@ import org.zaproxy.zap.PersistentConnectionListener;
 import org.zaproxy.zap.ZapGetMethod;
 import org.zaproxy.zap.extension.api.API;
 import org.zaproxy.zap.network.HttpRequestBody;
+import org.zaproxy.zap.network.HttpRequestConfig;
 
 
-class ProxyThread implements Runnable {
+public class ProxyThread implements Runnable {
 
 //	private static final int		BUFFEREDSTREAM_SIZE = 4096;
-	private static final String		CONNECT_HTTP_200 = "HTTP/1.1 200 Connection established\r\nProxy-connection: Keep-alive\r\n\r\n";
+	private static final String		CONNECT_HTTP_200 = "HTTP/1.1 200 Connection established\r\n\r\n";
 //	private static ArrayList 		processForwardList = new ArrayList();
     
 	private static Logger log = Logger.getLogger(ProxyThread.class);
@@ -114,6 +135,11 @@ class ProxyThread implements Runnable {
     private static final String BAD_GATEWAY_RESPONSE_STATUS = "502 Bad Gateway";
     private static final String GATEWAY_TIMEOUT_RESPONSE_STATUS = "504 Gateway Timeout";
     
+    /**
+     * A {@code HttpRequestConfig} that does not allow notification of events to listeners.
+     */
+    private static final HttpRequestConfig EXCLUDED_REQ_CONFIG = HttpRequestConfig.builder().setNotifyListeners(false).build();
+
 	// change httpSender to static to be shared among proxies to reuse keep-alive connections
 
 	protected ProxyServer parentServer = null;
@@ -136,11 +162,34 @@ class ProxyThread implements Runnable {
 	private static int id = 1;
     
     private static Vector<Thread> proxyThreadList = new Vector<>();
+
+    /**
+     * Used to obtain the public address of AWS EC2 instance.
+     * <p>
+     * Lazily initialised.
+     * 
+     * @see #getAwsCandidateHarvester()
+     * @see #isOwnPublicAddress(InetAddress)
+     */
+    private static AwsCandidateHarvester awsCandidateHarvester;
     
-	ProxyThread(ProxyServer server, Socket socket) {
+	protected ProxyThread(ProxyServer server, Socket socket) {
+		this(server, socket, null);
+	}
+
+	/**
+	 * Constructs a {@code ProxyThread} with the given proxy server, socket and HTTP sender.
+	 *
+	 * @param server the parent proxy server.
+	 * @param socket the connected socket to read/write the messages.
+	 * @param httpSender the object used to send the messages, might be {@code null} in which case a default is used.
+	 * @since 2.6.0
+	 */
+	protected ProxyThread(ProxyServer server, Socket socket, HttpSender httpSender) {
 		parentServer = server;
 		proxyParam = parentServer.getProxyParam();
 		connectionParam = parentServer.getConnectionParam();
+		this.httpSender = httpSender;
 
 		inSocket = socket;
     	try {
@@ -164,7 +213,7 @@ class ProxyThread implements Runnable {
 	
 	/**
 	 * @param targethost the host where you want to connect to
-	 * @throws IOException
+	 * @throws IOException if an error occurred while establishing the SSL/TLS connection
 	 */
 	private void beginSSL(String targethost) throws IOException {
 		// ZAP: added parameter 'targethost'
@@ -173,17 +222,35 @@ class ProxyThread implements Runnable {
         } catch (MissingRootCertificateException e) {
         	throw new MissingRootCertificateException(e); // throw again, cause will be catched later.
 		} catch (Exception e) {
-			// ZAP: transform for further processing 
-			throw new IOException("Error while establishing SSL connection for '" + targethost + "'!", e);
+			StringBuilder strBuilder = new StringBuilder(125);
+			strBuilder.append("Error while establishing SSL connection for ");
+			if (targethost == null) {
+				strBuilder.append("an unknown target domain (relying on SNI extension), cause: " + e.getMessage());
+			} else {
+				strBuilder.append("'" + targethost + "'!");
+			}
+			throw new IOException(strBuilder.toString(), e);
 		}
         
         httpIn = new HttpInputStream(inSocket);
         httpOut = new HttpOutputStream(inSocket.getOutputStream());
     }
 	
-	private static boolean isSslTlsHandshake(byte[] bytes) {
-		if (bytes.length < 3) {
-			throw new IllegalArgumentException("The parameter bytes must have at least 3 bytes.");
+	private static boolean isSslTlsHandshake(BufferedInputStream inputStream) throws IOException {
+		byte[] bytes = new byte[3];
+		inputStream.mark(3);
+		int bytesRead = inputStream.read(bytes);
+		inputStream.reset();
+
+		if (bytesRead == -1) {
+			throw new IOException("Failed to check if SSL/TLS handshake, reached end of the stream.");
+		}
+
+		if (bytesRead < 3) {
+			if (log.isDebugEnabled()) {
+				log.debug("Failed to check if SSL/TLS handshake, got just " + bytesRead + " bytes: " + Arrays.toString(bytes));
+			}
+			return false;
 		}
 		// Check if ContentType is handshake(22)
 		if (bytes[0] == 0x16) {
@@ -198,17 +265,23 @@ class ProxyThread implements Runnable {
 	@Override
 	public void run() {
         proxyThreadList.add(thread);
-		boolean isSecure = this instanceof ProxyThreadSSL;
+		boolean isSecure = false;
 		HttpRequestHeader firstHeader = null;
 		
 		try {
 			BufferedInputStream bufferedInputStream = new BufferedInputStream(inSocket.getInputStream(), 2048);
 			inSocket = new CustomStreamsSocket(inSocket, bufferedInputStream, inSocket.getOutputStream());
 
+			if (isSslTlsHandshake(bufferedInputStream)) {
+				isSecure = true;
+				beginSSL(null);
+			}
+
 			httpIn = new HttpInputStream(inSocket);
 			httpOut = new HttpOutputStream(inSocket.getOutputStream());
 			
 			firstHeader = httpIn.readRequestHeader(isSecure);
+			firstHeader.setSenderAddress(inSocket.getInetAddress());
             
 			if (firstHeader.getMethod().equalsIgnoreCase(HttpRequestHeader.CONNECT)) {
 				HttpMessage connectMsg = new HttpMessage(firstHeader);
@@ -220,17 +293,13 @@ class ProxyThread implements Runnable {
 					connectMsg.setTimeElapsedMillis((int) (System.currentTimeMillis() - connectMsg.getTimeSentMillis()));
 					notifyConnectMessage(connectMsg);
 					
-					byte[] bytes = new byte[3];
-					bufferedInputStream.mark(3);
-					bufferedInputStream.read(bytes);
-					bufferedInputStream.reset();
-					
-					if (isSslTlsHandshake(bytes)) {
+					if (isSslTlsHandshake(bufferedInputStream)) {
 				        isSecure = true;
 						beginSSL(firstHeader.getHostName());
 					}
 			        
 			        firstHeader = httpIn.readRequestHeader(isSecure);
+			        firstHeader.setSenderAddress(inSocket.getInetAddress());
 			        processHttp(firstHeader, isSecure);
 				} catch (MissingRootCertificateException e) {
 					// Unluckily Firefox and Internet Explorer will not show this message.
@@ -250,9 +319,16 @@ class ProxyThread implements Runnable {
 	    } catch (SocketTimeoutException e) {
         	// ZAP: Log the exception
 	    	if (firstHeader != null) {
-	    		log.warn("Timeout accessing " + firstHeader.getURI());
+	    		if (HttpRequestHeader.CONNECT.equalsIgnoreCase(firstHeader.getMethod())) {
+	    			log.warn("Timeout reading (client) message after CONNECT to " + firstHeader.getURI());
+	    		} else {
+	    			log.warn("Timeout accessing " + firstHeader.getURI());
+	    		}
 	    	} else {
-	    		log.warn("Timeout", e);
+	    		log.warn("Socket timeout while reading first message.");
+	    		if (log.isDebugEnabled()) {
+	    			log.debug(e, e);
+	    		}
 	    	}
 	    } catch (HttpMalformedHeaderException e) {
 	    	log.warn("Malformed Header: ", e);
@@ -293,14 +369,35 @@ class ProxyThread implements Runnable {
     private static void setErrorResponse(HttpMessage msg, String responseStatus, Exception cause, String errorType)
             throws HttpMalformedHeaderException {
         StringBuilder strBuilder = new StringBuilder();
-        strBuilder.append(errorType)
-                .append(" [")
-                .append(cause.getClass().getName())
-                .append("]: ")
-                .append(cause.getLocalizedMessage())
-                .append("\n\nStack Trace:\n");
-        for (String stackTraceFrame : ExceptionUtils.getRootCauseStackTrace(cause)) {
-            strBuilder.append(stackTraceFrame).append('\n');
+		
+        if (cause instanceof SSLException) {
+            strBuilder.append(Constant.messages.getString("network.ssl.error.connect"));
+            strBuilder.append(msg.getRequestHeader().getURI().toString()).append('\n');
+            strBuilder.append(Constant.messages.getString("network.ssl.error.exception")).append(cause.getMessage())
+                .append('\n');
+            strBuilder.append(Constant.messages.getString("network.ssl.error.exception.rootcause"))
+                .append(ExceptionUtils.getRootCauseMessage(cause)).append('\n');
+            strBuilder.append(Constant.messages.getString("network.ssl.error.help",
+                Constant.messages.getString("network.ssl.error.help.url")));
+            
+            log.warn(strBuilder.toString());
+            if (log.isDebugEnabled()) {
+                log.debug(cause, cause);
+                strBuilder.append("\n\nStack Trace:\n");
+                for (String stackTraceFrame : ExceptionUtils.getRootCauseStackTrace(cause)) {
+                    strBuilder.append(stackTraceFrame).append('\n');
+                }
+            }
+        } else {
+            strBuilder.append(errorType)
+            .append(" [")
+            .append(cause.getClass().getName())
+            .append("]: ")
+            .append(cause.getLocalizedMessage())
+            .append("\n\nStack Trace:\n");
+            for (String stackTraceFrame : ExceptionUtils.getRootCauseStackTrace(cause)) {
+                strBuilder.append(stackTraceFrame).append('\n');
+            }
         }
 
         setErrorResponse(msg, responseStatus, strBuilder.toString());
@@ -308,14 +405,14 @@ class ProxyThread implements Runnable {
 
     private static void setErrorResponse(HttpMessage msg, String responseStatus, String message)
             throws HttpMalformedHeaderException {
-        msg.setResponseHeader("HTTP/1.1 " + responseStatus);
+        HttpResponseHeader responseHeader = new HttpResponseHeader("HTTP/1.1 " + responseStatus);
+        responseHeader.setHeader(HttpHeader.CONTENT_TYPE, "text/plain; charset=UTF-8");
+        responseHeader.setHeader(HttpHeader.CONTENT_LENGTH, Integer.toString(message.getBytes(StandardCharsets.UTF_8).length));
+        msg.setResponseHeader(responseHeader);
 
         if (!HttpRequestHeader.HEAD.equals(msg.getRequestHeader().getMethod())) {
             msg.setResponseBody(message);
         }
-
-        msg.getResponseHeader().addHeader(HttpHeader.CONTENT_LENGTH, Integer.toString(message.length()));
-        msg.getResponseHeader().addHeader(HttpHeader.CONTENT_TYPE, "text/plain; charset=UTF-8");
     }
 
     private static void writeHttpResponse(HttpMessage msg, HttpOutputStream outputStream) throws IOException {
@@ -344,6 +441,7 @@ class ProxyThread implements Runnable {
 			} else {
 			    try {
 			        requestHeader = httpIn.readRequestHeader(isSecure);
+			        requestHeader.setSenderAddress(inSocket.getInetAddress());
 
 			    } catch (SocketTimeoutException e) {
 		        	// ZAP: Log the exception
@@ -354,7 +452,8 @@ class ProxyThread implements Runnable {
 			    }
 			}
 
-			if (API.getInstance().handleApiRequest(requestHeader, httpIn, httpOut, isRecursive(requestHeader))) {
+			if (parentServer.isEnableApi() &&
+					API.getInstance().handleApiRequest(requestHeader, httpIn, httpOut, isRecursive(requestHeader))) {
 				// It was an API request
 				return;
 			}
@@ -384,20 +483,25 @@ class ProxyThread implements Runnable {
 			}
 			
 			boolean send = true;
+			boolean excluded = parentServer.excludeUrl(msg.getRequestHeader().getURI());
 			synchronized (semaphore) {
 			    
-			    if (notifyOverrideListenersRequestSend(msg)) {
-			        send = false;
-			    } else if (! notifyListenerRequestSend(msg)) {
-		        	// One of the listeners has told us to drop the request
-			    	return;
-			    }
+				if (!excluded) {
+					if (notifyOverrideListenersRequestSend(msg)) {
+						send = false;
+					} else if (! notifyListenerRequestSend(msg)) {
+						// One of the listeners has told us to drop the request
+						return;
+					}
+				}
 			    
 			    try {
 //					bug occur where response cannot be processed by various listener
 //			        first so streaming feature was disabled		        
 //					getHttpSender().sendAndReceive(msg, httpOut, buffer);
-			        if (send) {
+					if (excluded) {
+						getHttpSender().sendAndReceive(msg, EXCLUDED_REQ_CONFIG);
+					} else if (send) {
 					    if (msg.getResponseHeader().isEmpty()) {
 					    	// Normally the response is empty.
 					    	// The only reason it wont be is if a script or other ext has deliberately 'hijacked' this request
@@ -428,12 +532,15 @@ class ProxyThread implements Runnable {
 					log.warn(message);
 					setErrorResponse(msg, GATEWAY_TIMEOUT_RESPONSE_STATUS, message);
 
-			        notifyListenerResponseReceive(msg);
+					if (!excluded) {
+						notifyListenerResponseReceive(msg);
+					}
 			    } catch (IOException e) {
 			    	setErrorResponse(msg, BAD_GATEWAY_RESPONSE_STATUS, e);
-			    	
-			        notifyListenerResponseReceive(msg);
 
+					if (!excluded) {
+						notifyListenerResponseReceive(msg);
+					}
 
 			        //throw e;
 			    }
@@ -553,12 +660,10 @@ class ProxyThread implements Runnable {
 	/**
 	 * Go through each observers to process a request in each observers.
 	 * The method can be modified in each observers.
-	 * @param httpMessage
+	 * @param httpMessage the request that was received from the client and may be forwarded to the server
+	 * @return {@code true} if the message should be forwarded to the server, {@code false} otherwise
 	 */
 	private boolean notifyListenerRequestSend(HttpMessage httpMessage) {
-		if (parentServer.excludeUrl(httpMessage.getRequestHeader().getURI())) {
-			return true;
-		}
 		ProxyListener listener = null;
 		List<ProxyListener> listenerList = parentServer.getListenerList();
 		for (int i=0;i<listenerList.size();i++) {
@@ -577,12 +682,10 @@ class ProxyThread implements Runnable {
 	/**
 	 * Go thru each observers and process the http message in each observers.
 	 * The msg can be changed by each observers.
-	 * @param msg
+	 * @param httpMessage the response that was received from the server and may be forwarded to the client
+	 * @return {@code true} if the message should be forwarded to the client, {@code false} otherwise
 	 */
 	private boolean notifyListenerResponseReceive(HttpMessage httpMessage) {
-		if (parentServer.excludeUrl(httpMessage.getRequestHeader().getURI())) {
-			return true;
-		}
 		ProxyListener listener = null;
 		List<ProxyListener> listenerList = parentServer.getListenerList();
 		for (int i=0;i<listenerList.size();i++) {
@@ -628,7 +731,7 @@ class ProxyThread implements Runnable {
 	 * Go thru each listener and offer him to take over the connection. The
 	 * first observer that returns true gets exclusive rights.
 	 * 
-	 * @param httpMessage Contains HTTP request & response.
+	 * @param httpMessage Contains HTTP request &amp; response.
 	 * @param inSocket Encapsulates the TCP connection to the browser.
 	 * @param method Provides more power to process response.
 	 * 
@@ -699,7 +802,7 @@ class ProxyThread implements Runnable {
      */
     private boolean isProxyAddress(InetAddress address) {
         if (parentServer.getProxyParam().isProxyIpAnyLocalAddress()) {
-            if (isLocalAddress(address) || isNetworkInterfaceAddress(address)) {
+            if (isLocalAddress(address) || isNetworkInterfaceAddress(address) || isOwnPublicAddress(address)) {
                 return true;
             }
         } else if (address.equals(inSocket.getLocalAddress())) {
@@ -737,6 +840,45 @@ class ProxyThread implements Runnable {
             log.warn("Failed to check if an address is from a network interface:", e);
         }
         return false;
+    }
+
+    /**
+     * Tells whether or not the given {@code address} is a public address of the host, when behind NAT.
+     * <p>
+     * Returns {@code false} if the proxy is not behind NAT.
+     * <p>
+     * <strong>Implementation Note:</strong> Only AWS EC2 NAT detection is supported, by requesting the public IP address from
+     * <a href= "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-instance-addressing.html#working-with-ip-addresses">
+     * AWS EC2 instance's metadata</a>.
+     * 
+     * @param address the address that will be checked
+     * @return {@code true} if the address is public address of the host, {@code false} otherwise.
+     * @see ProxyParam#isBehindNat()
+     */
+    private boolean isOwnPublicAddress(InetAddress address) {
+        if (!proxyParam.isBehindNat()) {
+            return false;
+        }
+
+        // Support just AWS for now.
+        TransportAddress publicAddress = getAwsCandidateHarvester().getMask();
+        if (publicAddress == null) {
+            return false;
+        }
+        return Arrays.equals(address.getAddress(), publicAddress.getAddress().getAddress());
+    }
+
+    private static AwsCandidateHarvester getAwsCandidateHarvester() {
+        if (awsCandidateHarvester == null) {
+            createAwsCandidateHarvester();
+        }
+        return awsCandidateHarvester;
+    }
+
+    private static synchronized void createAwsCandidateHarvester() {
+        if (awsCandidateHarvester == null) {
+            awsCandidateHarvester = new AwsCandidateHarvester();
+        }
     }
     
     private void removeUnsupportedEncodings(HttpMessage msg) {

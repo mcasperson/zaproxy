@@ -35,6 +35,11 @@ import org.zaproxy.zap.view.ZapMenuItem;
 public class ExtensionAPI extends ExtensionAdaptor {
 
 	public static final String NAME = "ExtensionAPI";
+	/**
+	 * @deprecated (2.7.0) Use {@link API#getBaseURL(boolean)} instead. This URL might not be correct in all cases,
+	 *             for example, if the API is set 'Secure' (thus needing to use HTTPS).
+	 */
+	@Deprecated
 	public static final String API_URL = "http://zap/";
 	
 	private OptionsApiPanel optionsApiPanel = null;
@@ -45,6 +50,11 @@ public class ExtensionAPI extends ExtensionAdaptor {
         super(NAME);
         this.setOrder(10);
 	}
+    
+    @Override
+    public String getUIName() {
+    	return Constant.messages.getString("api.name");
+    }
 
 	@Override
 	public void hook(ExtensionHook extensionHook) {
@@ -54,12 +64,10 @@ public class ExtensionAPI extends ExtensionAdaptor {
 	    	extensionHook.getHookMenu().addToolsMenuItem(getMenuAPI());
 	    }
         
-        coreApi = new CoreAPI();
-        coreApi.addApiOptions(extensionHook.getModel().getOptionsParam().getConnectionParam());
-        API.getInstance().registerApiImplementor(coreApi);
+        coreApi = new CoreAPI(extensionHook.getModel().getOptionsParam().getConnectionParam());
 
-        API.getInstance().registerApiImplementor(new ContextAPI());
-
+        extensionHook.addApiImplementor(coreApi);
+        extensionHook.addApiImplementor(new ContextAPI());
 
 	}
 
@@ -102,7 +110,7 @@ public class ExtensionAPI extends ExtensionAdaptor {
 						Model.getSingleton().getOptionsParam().getApiParam().setEnabled(true);
 					}
 
-					DesktopUtils.openUrlInBrowser(API_URL);
+					DesktopUtils.openUrlInBrowser(API.getInstance().getBaseURL(false));
 				}
 			});
 

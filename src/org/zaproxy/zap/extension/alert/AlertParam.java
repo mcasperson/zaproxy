@@ -19,13 +19,9 @@
  */
 package org.zaproxy.zap.extension.alert;
 
-import org.apache.commons.configuration.ConversionException;
-import org.apache.log4j.Logger;
 import org.parosproxy.paros.common.AbstractParam;
 
 public class AlertParam extends AbstractParam {
-
-    private static final Logger LOGGER = Logger.getLogger(AlertParam.class);
 
     /**
      * The base configuration key for all alert configurations.
@@ -41,6 +37,8 @@ public class AlertParam extends AbstractParam {
      */
     private static final String PARAM_MAXIMUM_INSTANCES = PARAM_BASE_KEY + ".maxInstances";
 
+    private static final String PARAM_OVERRIDES_FILENAME = PARAM_BASE_KEY + ".overridesFilename";
+
     private static final int DEFAULT_MAXIMUM_INSTANCES = 20;
 
     /**
@@ -52,6 +50,8 @@ public class AlertParam extends AbstractParam {
     private int maximumInstances = DEFAULT_MAXIMUM_INSTANCES;
     
     private boolean mergeRelatedIssues = true;
+    
+    private String overridesFilename;
 
     /**
      * Parses the alert options.
@@ -60,31 +60,28 @@ public class AlertParam extends AbstractParam {
      */
     @Override
     protected void parse() {
-        try {
-            maximumInstances = getConfig().getInt(PARAM_MAXIMUM_INSTANCES, DEFAULT_MAXIMUM_INSTANCES);
-        } catch (ConversionException e) {
-            LOGGER.error("Failed to load the \"Maximum instances\" configuration: " + e.getMessage(), e);
-        }
-        try {
-        	mergeRelatedIssues = getConfig().getBoolean(PARAM_MERGE_RELATED_ISSUES, true);
-        } catch (ConversionException e) {
-            LOGGER.error("Failed to load the \"old format\" configuration: " + e.getMessage(), e);
-        }
+        maximumInstances = getInt(PARAM_MAXIMUM_INSTANCES, DEFAULT_MAXIMUM_INSTANCES);
+        mergeRelatedIssues = getBoolean(PARAM_MERGE_RELATED_ISSUES, true);
+        overridesFilename = getString(PARAM_OVERRIDES_FILENAME, "");
     }
 
     /**
      * Sets the maximum instances of an alert to include in a report.
+     * @param maximumInstances the maximum number of instances for each alert
      */
     public void setMaximumInstances(int maximumInstances) {
-        if (this.maximumInstances != maximumInstances) {
-            this.maximumInstances = maximumInstances;
+        int newValue = maximumInstances < 0 ? 0 : maximumInstances;
 
-            getConfig().setProperty(PARAM_MAXIMUM_INSTANCES, Integer.valueOf(maximumInstances));
+        if (this.maximumInstances != newValue) {
+            this.maximumInstances = newValue;
+
+            getConfig().setProperty(PARAM_MAXIMUM_INSTANCES, Integer.valueOf(this.maximumInstances));
         }
     }
 
     /**
      * Returns the maximum instances of an alert to include in a report.
+     * @return the maximum number of instances for each alert
      */
     public int getMaximumInstances() {
         return maximumInstances;
@@ -100,5 +97,14 @@ public class AlertParam extends AbstractParam {
             getConfig().setProperty(PARAM_MERGE_RELATED_ISSUES, Boolean.valueOf(mergeRelatedIssues));
 		}
 	}
+
+    public String getOverridesFilename() {
+        return overridesFilename;
+    }
+
+    public void setOverridesFilename(String overridesFilename) {
+        this.overridesFilename = overridesFilename;
+        getConfig().setProperty(PARAM_OVERRIDES_FILENAME, overridesFilename);
+    }
 
 }

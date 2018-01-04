@@ -17,7 +17,6 @@
  */
 package org.zaproxy.zap.extension.keyboard;
 
-import java.text.MessageFormat;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -68,7 +67,6 @@ public class KeyboardAPI extends ApiImplementor {
 				true);
 	}
 
-	@SuppressWarnings({ "unchecked", "rawtypes" })
 	@Override
 	public HttpMessage handleApiOther(HttpMessage msg, String name, JSONObject params) throws ApiException {
 		if (OTHER_CHEETSHEET_ACTION_ORDER.equals(name) ||
@@ -77,17 +75,16 @@ public class KeyboardAPI extends ApiImplementor {
 			List<KeyboardShortcut> shortcuts = this.extension.getShortcuts();
 			
 			if (OTHER_CHEETSHEET_ACTION_ORDER.equals(name)) {
-				Collections.sort(shortcuts, new Comparator() {
+				Collections.sort(shortcuts, new Comparator<KeyboardShortcut>() {
 					@Override
-					public int compare(Object o1, Object o2) {
-						return ((KeyboardShortcut)o1).getName().compareTo(((KeyboardShortcut)o2).getName());
+					public int compare(KeyboardShortcut o1, KeyboardShortcut o2) {
+						return o1.getName().compareTo(o2.getName());
 					}});
 			} else {
-				Collections.sort(shortcuts, new Comparator() {
+				Collections.sort(shortcuts, new Comparator<KeyboardShortcut>() {
 					@Override
-					public int compare(Object o1, Object o2) {
-						return ((KeyboardShortcut)o1).getKeyStrokeKeyCodeString().compareTo(
-								((KeyboardShortcut)o2).getKeyStrokeKeyCodeString());
+					public int compare(KeyboardShortcut o1, KeyboardShortcut o2) {
+						return o1.getKeyStrokeKeyCodeString().compareTo(o2.getKeyStrokeKeyCodeString());
 					}});
 			}
 			
@@ -98,8 +95,7 @@ public class KeyboardAPI extends ApiImplementor {
 			for (KeyboardShortcut shortcut : shortcuts) {
 				if (incUnset || shortcut.getKeyStrokeKeyCodeString().length() > 0) {
 					// Only show actions with actual shortcuts
-					response.append(MessageFormat.format(
-							Constant.messages.getString("keyboard.api.cheatsheet.tablerow"),
+					response.append(Constant.messages.getString("keyboard.api.cheatsheet.tablerow",
 							shortcut.getName(),
 							shortcut.getKeyStrokeModifiersString(),
 							shortcut.getKeyStrokeKeyCodeString()));

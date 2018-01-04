@@ -18,6 +18,8 @@
 package org.parosproxy.paros;
 
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
@@ -50,6 +52,9 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 import org.zaproxy.zap.utils.I18N;
 
+/**
+ * Unit test for {@link CommandLine}.
+ */
 @RunWith(PowerMockRunner.class)
 @PrepareForTest(Constant.class)
 public class CommandLineUnitTest {
@@ -82,6 +87,25 @@ public class CommandLineUnitTest {
     }
 
     @Test
+    public void shouldAcceptNullArguments() throws Exception {
+        // Given
+        String[] args = null;
+        // When
+        cmdLine = new CommandLine(args);
+        // Then = No Exception.
+    }
+
+    @Test
+    public void shouldParseNullArguments() throws Exception {
+        // Given
+        String[] args = { null, null };
+        cmdLine = new CommandLine(args);
+        // When
+        cmdLine.parse(NO_EXTENSIONS_CUSTOM_ARGUMENTS, NO_SUPPORTED_FILE_EXTENSIONS);
+        // Then = No Exception.
+    }
+
+    @Test
     public void emptyCommandLine() throws Exception {
         cmdLine = new CommandLine(new String[] {});
         cmdLine.parse(NO_EXTENSIONS_CUSTOM_ARGUMENTS, NO_SUPPORTED_FILE_EXTENSIONS);
@@ -106,6 +130,13 @@ public class CommandLineUnitTest {
         // Then
         assertThat(cmdLine.isDaemon(), is(equalTo(false)));
         assertThat(cmdLine.isGUI(), is(equalTo(false)));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void shouldFailIfDaemonAndCommandLineArgumentsAreSet() throws Exception {
+        // Given / When
+        cmdLine = new CommandLine(new String[] { CommandLine.CMD, CommandLine.DAEMON });
+        // Then = IllegalArgumentException.class
     }
 
     @Test(expected = Exception.class)
@@ -185,6 +216,22 @@ public class CommandLineUnitTest {
     }
 
     @Test
+    public void shouldHaveNoStdOutArgumentDisabledByDefault() throws Exception {
+        // Given / When
+        cmdLine = new CommandLine(new String[] {});
+        // Then
+        assertThat(cmdLine.isNoStdOutLog(), is(equalTo(false)));
+    }
+
+    @Test
+    public void shouldParseNoStdOutArgument() throws Exception {
+        // Given / When
+        cmdLine = new CommandLine(new String[] { CommandLine.NOSTDOUT });
+        // Then
+        assertThat(cmdLine.isNoStdOutLog(), is(equalTo(true)));
+    }
+
+    @Test
     public void shouldGetNullFromNonGivenArgument() throws Exception {
         // Given
         cmdLine = new CommandLine(new String[] {});
@@ -230,7 +277,7 @@ public class CommandLineUnitTest {
         assertFalse(customArguments.get(2)[0].isEnabled());
     }
 
-    /*@Test	TODO temp
+    @Test
     public void claWithArgs() throws Exception {
         cmdLine = new CommandLine(new String[] { "-a", "aaa", "-b", "bbb", "BBB" });
         Vector<CommandLineArgument[]> customArguments = new Vector<>();
@@ -252,7 +299,6 @@ public class CommandLineUnitTest {
 
         assertFalse(customArguments.get(2)[0].isEnabled());
     }
-    */
 
     @Test
     public void claWithMissingArgs() throws Exception {
@@ -298,11 +344,10 @@ public class CommandLineUnitTest {
         // Then = Exception.class
     }
 
-    /*@Test TODO
+    @Test
     public void shouldAcceptFileArgumentIfHasSupportedFileExtension() throws Exception {
         // Given
         String fileExtension = "test";
-        folder.create();
         File testFile = folder.newFile("aaa." + fileExtension);
         Map<String, CommandLineListener> supportedExtensions = new HashMap<>();
         supportedExtensions.put(fileExtension, new AcceptAllFilesCommandLineListener());
@@ -311,7 +356,6 @@ public class CommandLineUnitTest {
         cmdLine.parse(NO_EXTENSIONS_CUSTOM_ARGUMENTS, supportedExtensions);
         // Then = Accepted file argument
     }
-    */
 
     @Test(expected = Exception.class)
     public void shouldNotAcceptFileArgumentIfRejectedBySupportedFileExtension() throws Exception {

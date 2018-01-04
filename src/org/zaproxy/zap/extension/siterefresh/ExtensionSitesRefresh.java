@@ -25,13 +25,13 @@ import org.parosproxy.paros.extension.ExtensionAdaptor;
 import org.parosproxy.paros.extension.ExtensionHook;
 
 public class ExtensionSitesRefresh extends ExtensionAdaptor {
+	
+	private static final String NAME = "ExtensionSitesRefresh";
 
 	private PopupMenuSitesRefresh popupMenuSitesRefresh = null;
-	/**
-     * 
-     */
+
     public ExtensionSitesRefresh() {
-        super("ExtensionSitesRefresh");
+        super(NAME);
         this.setOrder(1000);	// Want this to be as low as possible :)
 	}
 	
@@ -51,6 +51,11 @@ public class ExtensionSitesRefresh extends ExtensionAdaptor {
 		
 	}
 
+	@Override
+	public String getUIName() {
+		return Constant.messages.getString("siterefresh.name");
+	}
+	
 	@Override
 	public String getAuthor() {
 		return Constant.ZAP_TEAM;

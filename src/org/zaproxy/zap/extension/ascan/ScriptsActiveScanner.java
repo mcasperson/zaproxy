@@ -56,11 +56,7 @@ public class ScriptsActiveScanner extends AbstractAppParamPlugin {
 
     @Override
     public String getName() {
-    	// TODO this npes due to loading order :(
-    	if (Constant.messages.containsKey("ascan.scripts.activescanner.title")) {
-    		return Constant.messages.getString("ascan.scripts.activescanner.title");
-    	}
-    	return "Script active scan rules";
+    	return Constant.messages.getString("ascan.scripts.activescanner.title");
     }
 
     @Override
@@ -91,7 +87,7 @@ public class ScriptsActiveScanner extends AbstractAppParamPlugin {
     @Override
     public void init() {
         if (shouldSkipScan()) {
-            getParent().pluginSkipped(this);
+            getParent().pluginSkipped(this, Constant.messages.getString("ascan.scripts.skip.reason"));
         }
     }
 
@@ -135,7 +131,7 @@ public class ScriptsActiveScanner extends AbstractAppParamPlugin {
 
 	private ExtensionScript getExtension() {
 		if (extension == null) {
-			extension = (ExtensionScript) Control.getSingleton().getExtensionLoader().getExtension(ExtensionScript.NAME);
+			extension = Control.getSingleton().getExtensionLoader().getExtension(ExtensionScript.class);
 		}
 		return extension;
 	}

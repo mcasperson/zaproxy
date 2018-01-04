@@ -10,3 +10,9 @@ out/
 /build/dist/
 /build/results/
 /bin/
+
+# Node
+node_modules/
+
+# ZAP
+src/plugin/

@@ -15,19 +15,21 @@ import javax.swing.border.EmptyBorder;
 import org.parosproxy.paros.Constant;
 import org.parosproxy.paros.extension.AbstractPanel;
 import org.parosproxy.paros.model.Model;
+import org.zaproxy.zap.utils.DisplayUtils;
+import org.zaproxy.zap.utils.FontUtils;
 
 public class TabbedPanelTab extends JPanel {
 
-	private static final Icon CLOSE_TAB_GREY_ICON = new ImageIcon(
-			TabbedPanel2.class.getResource("/resource/icon/fugue/cross-small-grey.png"));
-	private static final Icon CLOSE_TAB_RED_ICON = new ImageIcon(
-			TabbedPanel2.class.getResource("/resource/icon/fugue/cross-small-red.png"));
-	private static final Icon PIN_TAB_GREY_ICON = new ImageIcon(
-			TabbedPanel2.class.getResource("/resource/icon/fugue/pin-small-grey.png"));
-	private static final Icon PIN_TAB_LIGHT_GREY_ICON = new ImageIcon(
-			TabbedPanel2.class.getResource("/resource/icon/fugue/pin-small-ltgrey.png"));
-	private static final Icon PIN_TAB_RED_ICON = new ImageIcon(
-			TabbedPanel2.class.getResource("/resource/icon/fugue/pin-small-red.png"));
+	private static final Icon CLOSE_TAB_GREY_ICON = DisplayUtils.getScaledIcon(new ImageIcon(
+			TabbedPanel2.class.getResource("/resource/icon/fugue/cross-small-grey.png")));
+	private static final Icon CLOSE_TAB_RED_ICON = DisplayUtils.getScaledIcon(new ImageIcon(
+			TabbedPanel2.class.getResource("/resource/icon/fugue/cross-small-red.png")));
+	private static final Icon PIN_TAB_GREY_ICON = DisplayUtils.getScaledIcon(new ImageIcon(
+			TabbedPanel2.class.getResource("/resource/icon/fugue/pin-small-grey.png")));
+	private static final Icon PIN_TAB_LIGHT_GREY_ICON = DisplayUtils.getScaledIcon(new ImageIcon(
+			TabbedPanel2.class.getResource("/resource/icon/fugue/pin-small-ltgrey.png")));
+	private static final Icon PIN_TAB_RED_ICON = DisplayUtils.getScaledIcon(new ImageIcon(
+			TabbedPanel2.class.getResource("/resource/icon/fugue/pin-small-red.png")));
 
 	private static final long serialVersionUID = 1L;
 
@@ -52,6 +54,7 @@ public class TabbedPanelTab extends JPanel {
 		// Add a JLabel with title and the left-side tab icon
 		JLabel lblTitle = new JLabel(title);
 		lblTitle.setIcon(icon);
+		lblTitle.setFont(FontUtils.getFont(FontUtils.Size.standard));
 
 		this.add(lblTitle);
 		

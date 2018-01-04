@@ -34,6 +34,10 @@
 // ZAP: 2016/01/26 Fixed findbugs warning
 // ZAP: 2016/04/21 Allow to obtain the number of requests sent during the analysis
 // ZAP: 2016/06/10 Honour scan's scope when following redirections
+// ZAP: 2016/09/20 JavaDoc tweaks
+// ZAP: 2017/03/27 Use HttpRequestConfig.
+// ZAP: 2017/06/15 Allow to obtain the running time of the analysis.
+// ZAP: 2017/12/29 Rely on HostProcess to validate the redirections.
 
 package org.parosproxy.paros.core.scanner;
 
@@ -47,6 +51,7 @@ import java.util.regex.Pattern;
 import org.apache.commons.httpclient.HttpException;
 import org.apache.commons.httpclient.URI;
 import org.apache.commons.httpclient.URIException;
+import org.apache.commons.lang.time.StopWatch;
 import org.apache.log4j.Logger;
 import org.parosproxy.paros.db.DatabaseException;
 import org.parosproxy.paros.network.HttpHeader;
@@ -73,6 +78,9 @@ public class Analyser {
     private TreeMap<String, SampleResponse> mapVisited = new TreeMap<>();
     private boolean isStop = false;
 
+    private StopWatch stopWatch;
+    private boolean stopWatchStarted;
+
     // ZAP Added delayInMs
     private int delayInMs;
 
@@ -93,6 +101,7 @@ public class Analyser {
     public Analyser(HttpSender httpSender, HostProcess parent) {
         this.httpSender = httpSender;
         this.parent = parent;
+        this.stopWatch = new StopWatch();
     }
 
     public boolean isStop() {
@@ -104,7 +113,18 @@ public class Analyser {
     }
 
     public void start(StructuralNode node) {
-        inOrderAnalyse(node);
+        if (stopWatchStarted) {
+            stopWatch.resume();
+        } else {
+            stopWatch.start();
+            stopWatchStarted = true;
+        }
+
+        try {
+            inOrderAnalyse(node);
+        } finally {
+            stopWatch.suspend();
+        }
     }
 
     private void addAnalysedHost(URI uri, HttpMessage msg, int errorIndicator) {
@@ -119,6 +139,8 @@ public class Analyser {
     /**
      * Analyse a single folder entity. Results are stored into
      * mAnalysedEntityTable.
+     * @param node the node that will be analysed
+     * @throws Exception if an error occurred while analysing the node (for example, failed to send the message)
      */
     private void analyse(StructuralNode node) throws Exception {
 	// if analysed already, return;
@@ -207,7 +229,7 @@ public class Analyser {
      * option is provided to check recursively. Note that the immediate children
      * are always checked first before further recursive check is done.
      *
-     * @param	entity	The current entity.
+     * @param	node the node used to obtain the suffix
      * @param	performRecursiveCheck	True = get recursively the suffix from all
      * the children.
      * @return	The suffix ".xxx" is returned. If there is no suffix found, an
@@ -282,11 +304,11 @@ public class Analyser {
      * a suffix exist in the children according to a priority of
      * staticSuffixList.
      *
-     * @param	entity	The current entity.
+     * @param	node the node used to construct the random path
      * @param	uri	The uri of the current entity.
      * @return	A random path (eg /folder1/folder2/1234567.chm) relative the
      * entity.
-     * @throws URIException
+     * @throws URIException if unable to decode the path of the given URI 
      */
     private String getRandomPathSuffix(StructuralNode node, URI uri) throws URIException {
         String resultSuffix = getChildSuffix(node, true);
@@ -314,6 +336,7 @@ public class Analyser {
 
     /**
      * Analyse node (should be a folder unless it is host level) in-order.
+     * @param node the node to analyse
      * @return the number of nodes available at this layer
      */
     private int inOrderAnalyse(StructuralNode node) {
@@ -478,24 +501,7 @@ public class Analyser {
             }
         }
 
-        httpSender.sendAndReceive(msg, new HttpSender.RedirectionValidator() {
-
-            @Override
-            public boolean isValid(URI redirection) {
-                if (!parent.nodeInScope(redirection.getEscapedURI())) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("Skipping redirection out of scan's scope: " + redirection);
-                    }
-                    return false;
-                }
-                return true;
-            }
-
-            @Override
-            public void notifyMessageReceived(HttpMessage message) {
-                // Nothing to do with the message.
-            }
-        });
+        httpSender.sendAndReceive(msg, parent.getRedirectRequestConfig());
         requestCount++;
 
         // ZAP: Notify parent
@@ -520,6 +526,16 @@ public class Analyser {
      */
     public int getRequestCount() {
         return requestCount;
+    }
+
+    /**
+     * Gets the running time, in milliseconds, of the analyser.
+     *
+     * @return the running time of the analyser.
+     * @since 2.7.0
+     */
+    public long getRunningTime() {
+        return stopWatch.getTime();
     }
 
 }

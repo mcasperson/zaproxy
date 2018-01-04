@@ -20,6 +20,7 @@ package org.zaproxy.zap.extension.httpsessions;
 import java.net.HttpCookie;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -38,7 +39,6 @@ import org.parosproxy.paros.model.Session;
 import org.parosproxy.paros.model.SiteNode;
 import org.parosproxy.paros.network.HttpMessage;
 import org.parosproxy.paros.network.HttpSender;
-import org.zaproxy.zap.extension.api.API;
 import org.zaproxy.zap.model.Context;
 import org.zaproxy.zap.network.HttpSenderListener;
 import org.zaproxy.zap.view.ScanPanel;
@@ -125,6 +125,16 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 	}
 
 	@Override
+	public boolean supportsDb(String type) {
+		return true;
+	}
+
+	@Override
+	public String getUIName() {
+		return Constant.messages.getString("httpsessions.name");
+	}
+	
+	@Override
 	public String getAuthor() {
 		return Constant.ZAP_TEAM;
 	}
@@ -158,7 +168,7 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 
 		extensionHook.addSessionListener(this);
 		extensionHook.addSiteMapListener(this);
-		HttpSender.addListener(this);
+		extensionHook.addHttpSenderListener(this);
 
 		if (getView() != null) {
 
@@ -175,8 +185,7 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 		}
 
 		// Register as an API implementor
-		HttpSessionsAPI httpSessionsApi = new HttpSessionsAPI(this);
-		API.getInstance().registerApiImplementor(httpSessionsApi);
+		extensionHook.addApiImplementor(new HttpSessionsAPI(this));
 	}
 
 	/**
@@ -365,7 +374,11 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 			siteTokens = new HttpSessionTokensSet();
 			sessionTokens.put(site, siteTokens);
 		}
-		log.info("Added new session token for site '" + site + "': " + token);
+
+		if (log.isDebugEnabled()) {
+			log.debug("Added new session token for site '" + site + "': " + token);
+		}
+
 		siteTokens.addToken(token);
 		// If the session token is a default token and was previously marked as remove, undo that
 		unmarkRemovedDefaultSessionToken(site, token);
@@ -406,7 +419,10 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 		// be detected again and added as a session token
 		if (isDefaultSessionToken(token))
 			markRemovedDefaultSessionToken(site, token);
-		log.info("Removed session token for site '" + site + "': " + token);
+
+		if (log.isDebugEnabled()) {
+			log.debug("Removed session token for site '" + site + "': " + token);
+		}
 	}
 
 	/**
@@ -450,7 +466,7 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 	 *            missing, a default protocol of 80 is used.
 	 * @return the http sessions site container
 	 */
-	protected HttpSessionsSite getHttpSessionsSite(String site) {
+	public HttpSessionsSite getHttpSessionsSite(String site) {
 		return getHttpSessionsSite(site, true);
 	}
 
@@ -467,7 +483,7 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 	 *         false
 	 * 
 	 */
-	protected HttpSessionsSite getHttpSessionsSite(String site, boolean createIfNeeded) {
+	public HttpSessionsSite getHttpSessionsSite(String site, boolean createIfNeeded) {
 		// Add a default port
 		if (!site.contains(":")) {
 			site = site + (":80");
@@ -566,6 +582,25 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 		return null;
 	}
 
+	/**
+	 * Gets all of the sites with http sessions.
+	 * 
+	 * @return all of the sites with http sessions
+	 */
+	public List<String> getSites() {
+		List<String> sites = new ArrayList<String>();
+		if (this.sessions == null) {
+			return sites;
+		}
+
+		synchronized (sessionLock) {
+			sites.addAll(this.sessions.keySet());
+		}
+
+		return sites;
+	}
+
+
 	@Override
 	public int getListenerOrder() {
 		return 1;
@@ -573,7 +608,7 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 
 	@Override
 	public void onHttpRequestSend(HttpMessage msg, int initiator, HttpSender sender) {
-		if (initiator == HttpSender.CHECK_FOR_UPDATES_INITIATOR) {
+		if (initiator == HttpSender.CHECK_FOR_UPDATES_INITIATOR || initiator == HttpSender.AUTHENTICATION_INITIATOR) {
 			return;
 		}
 
@@ -590,7 +625,14 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 			return;
 
 		// Check for default tokens in request messages
-		List<HttpCookie> requestCookies = msg.getRequestHeader().getHttpCookies();
+		List<HttpCookie> requestCookies;
+		try {
+			requestCookies = msg.getRequestHeader().getHttpCookies();
+		} catch (IllegalArgumentException e) {
+			log.warn("Failed to obtain the cookies: " + e.getMessage(), e);
+			return;
+		}
+
 		for (HttpCookie cookie : requestCookies) {
 			// If it's a default session token and it is not already marked as session token and was
 			// not previously removed by the user
@@ -608,7 +650,9 @@ public class ExtensionHttpSessions extends ExtensionAdaptor implements SessionCh
 	@Override
 	public void onHttpResponseReceive(HttpMessage msg, int initiator, HttpSender sender) {
 		if (initiator == HttpSender.ACTIVE_SCANNER_INITIATOR || initiator == HttpSender.SPIDER_INITIATOR
-				|| initiator == HttpSender.CHECK_FOR_UPDATES_INITIATOR || initiator == HttpSender.FUZZER_INITIATOR) {
+				|| initiator == HttpSender.AJAX_SPIDER_INITIATOR || initiator == HttpSender.FORCED_BROWSE_INITIATOR
+				|| initiator == HttpSender.CHECK_FOR_UPDATES_INITIATOR || initiator == HttpSender.FUZZER_INITIATOR
+				|| initiator == HttpSender.AUTHENTICATION_INITIATOR) {
 			// Not a session we care about
 			return;
 		}

@@ -19,6 +19,7 @@
  */
 package org.zaproxy.zap.extension.anticsrf;
 
+import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLDecoder;
@@ -54,7 +55,6 @@ import org.parosproxy.paros.model.Session;
 import org.parosproxy.paros.network.HtmlParameter;
 import org.parosproxy.paros.network.HttpMalformedHeaderException;
 import org.parosproxy.paros.network.HttpMessage;
-import org.zaproxy.zap.extension.api.API;
 import org.zaproxy.zap.extension.pscan.ExtensionPassiveScan;
 
 public class ExtensionAntiCSRF extends ExtensionAdaptor implements SessionChangedListener {
@@ -86,17 +86,25 @@ public class ExtensionAntiCSRF extends ExtensionAdaptor implements SessionChange
 	}
 
     @Override
+    public boolean supportsDb(String type) {
+        return true;
+    }
+
+    @Override
     public void init() {
         antiCsrfDetectScanner = new AntiCsrfDetectScanner(this);
+    }
+    
+    @Override
+    public String getUIName() {
+    	return Constant.messages.getString("acsrf.name");
     }
 
 	@Override
 	public void hook(ExtensionHook extensionHook) {
 	    super.hook(extensionHook);
 
-		final ExtensionHistory extensionHistory = (ExtensionHistory) Control.getSingleton()
-				.getExtensionLoader()
-				.getExtension(ExtensionHistory.NAME);
+		final ExtensionHistory extensionHistory = Control.getSingleton().getExtensionLoader().getExtension(ExtensionHistory.class);
 		if (extensionHistory != null) {
 			historyReferenceFactory = new HistoryReferenceFactory() {
 
@@ -123,24 +131,20 @@ public class ExtensionAntiCSRF extends ExtensionAdaptor implements SessionChange
 	        extensionHook.getHookMenu().addPopupMenuItem(this.getPopupMenuGenerateForm());
 	    }
 
-        ExtensionPassiveScan extensionPassiveScan = (ExtensionPassiveScan) Control.getSingleton()
-                .getExtensionLoader()
-                .getExtension(ExtensionPassiveScan.NAME);
+        ExtensionPassiveScan extensionPassiveScan = Control.getSingleton().getExtensionLoader().getExtension(ExtensionPassiveScan.class);
         if (extensionPassiveScan != null) {
             extensionPassiveScan.addPassiveScanner(antiCsrfDetectScanner);
         }
 
 	    AntiCsrfAPI api = new AntiCsrfAPI(this);
         api.addApiOptions(getParam());
-        API.getInstance().registerApiImplementor(api);
+        extensionHook.addApiImplementor(api);
 
 	}
 	
 	@Override
 	public void unload() {
-		ExtensionPassiveScan extensionPassiveScan = (ExtensionPassiveScan) Control.getSingleton()
-				.getExtensionLoader()
-				.getExtension(ExtensionPassiveScan.NAME);
+		ExtensionPassiveScan extensionPassiveScan = Control.getSingleton().getExtensionLoader().getExtension(ExtensionPassiveScan.class);
 		if (extensionPassiveScan != null) {
 			extensionPassiveScan.removePassiveScanner(antiCsrfDetectScanner);
 		}
@@ -393,51 +397,59 @@ public class ExtensionAntiCSRF extends ExtensionAdaptor implements SessionChange
 	}
 
 	public String generateForm(int hrefId) throws Exception {
-		ExtensionHistory extHist = (ExtensionHistory) Control.getSingleton().getExtensionLoader().getExtension(ExtensionHistory.NAME);
+		ExtensionHistory extHist = Control.getSingleton().getExtensionLoader().getExtension(ExtensionHistory.class);
 		if (extHist != null) {
 			HistoryReference hr = extHist.getHistoryReference(hrefId);
-			if (hr == null) {
-				return null;
+			if (hr != null) {
+				return generateForm(hr.getHttpMessage());
 			}
-			HttpMessage msg = hr.getHttpMessage();
-			StringBuilder sb = new StringBuilder(300);
-			sb.append("<html>\n");
-			sb.append("<body>\n");
-			sb.append("<h3>");
-			sb.append(msg.getRequestHeader().getURI());
-			sb.append("</h3>");
-			sb.append("<form id=\"f1\" method=\"POST\" action=\"" + hr.getURI() + "\">\n");
-			sb.append("<table>\n");
-			
-			TreeSet<HtmlParameter> params = msg.getFormParams();
-			// Let the message be GC'ed as it's no longer needed.
-			msg = null;
-			Iterator<HtmlParameter> iter = params.iterator();
-			while (iter.hasNext()) {
-				HtmlParameter htmlParam = iter.next();
-				String name = URLDecoder.decode(htmlParam.getName(), "UTF-8");
-				String value = URLDecoder.decode(htmlParam.getValue(), "UTF-8");
-				sb.append("<tr><td>\n");
-				sb.append(name);
-				sb.append("<td>");
-				sb.append("<input name=\"");
-				sb.append(name);
-				sb.append("\" value=\"");
-				sb.append(value);
-				sb.append("\" size=\"100\">");
-				sb.append("</tr>\n");
-			}
-
-			sb.append("</table>\n");
-			sb.append("</form>\n");
-			sb.append("<button onclick=\"document.getElementById('f1').submit()\">Submit</button>\n");
-			sb.append("</body>\n");
-			sb.append("</html>\n");
-
-			return sb.toString();
+		}
+		return null;
+	}
+	
+	/**
+	 * Generates a HTML form from the given message.
+	 *
+	 * @param msg the message used to generate the HTML form, must not be {@code null}.
+	 * @return a string containing the HTML form, never {@code null}.
+	 * @throws UnsupportedEncodingException if an error occurred while encoding the values of the form.
+	 * @since 2.7.0
+	 */
+	public String generateForm(HttpMessage msg) throws UnsupportedEncodingException {
+		String requestUri = msg.getRequestHeader().getURI().toString();
+		StringBuilder sb = new StringBuilder(300);
+		sb.append("<html>\n");
+		sb.append("<body>\n");
+		sb.append("<h3>");
+		sb.append(requestUri);
+		sb.append("</h3>");
+		sb.append("<form id=\"f1\" method=\"POST\" action=\"").append(requestUri).append("\">\n");
+		sb.append("<table>\n");
+		
+		TreeSet<HtmlParameter> params = msg.getFormParams();
+		Iterator<HtmlParameter> iter = params.iterator();
+		while (iter.hasNext()) {
+			HtmlParameter htmlParam = iter.next();
+			String name = URLDecoder.decode(htmlParam.getName(), "UTF-8");
+			String value = URLDecoder.decode(htmlParam.getValue(), "UTF-8");
+			sb.append("<tr><td>\n");
+			sb.append(name);
+			sb.append("<td>");
+			sb.append("<input name=\"");
+			sb.append(name);
+			sb.append("\" value=\"");
+			sb.append(value);
+			sb.append("\" size=\"100\">");
+			sb.append("</tr>\n");
 		}
 
-		return null;
+		sb.append("</table>\n");
+		sb.append("<input id=\"submit\" type=\"submit\" value=\"Submit\"/>\n");
+		sb.append("</form>\n");
+		sb.append("</body>\n");
+		sb.append("</html>\n");
+
+		return sb.toString();
 	}
 
 	static interface HistoryReferenceFactory {

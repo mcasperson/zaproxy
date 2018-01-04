@@ -43,15 +43,27 @@ public class SpiderPanelTableModel extends AbstractTableModel {
 
 	/** The Spider scan results. */
 	private List<SpiderScanResult> scanResults;
+	
+	private boolean incFlags;
 
 	/**
 	 * Instantiates a new spider panel table model.
 	 */
 	public SpiderPanelTableModel() {
-		super();
+		this(true);
 
 		scanResults = new ArrayList<>();
 	}
+
+    /**
+     * Instantiates a new spider panel table model.
+     */
+    public SpiderPanelTableModel(boolean incFlags) {
+        super();
+        this.incFlags = incFlags;
+
+        scanResults = new ArrayList<>();
+    }
 
 	@Override
 	public String getColumnName(int column) {
@@ -60,7 +72,11 @@ public class SpiderPanelTableModel extends AbstractTableModel {
 
 	@Override
 	public int getColumnCount() {
+	    if (incFlags) {
 		return COLUMN_COUNT;
+	    } else {
+	        return COLUMN_COUNT -1;
+	    }
 	}
 
 	@Override
@@ -80,7 +96,6 @@ public class SpiderPanelTableModel extends AbstractTableModel {
 		case 2:
 			return result.uri;
 		case 3:
-			// TODO: Internationalize flags
 			return result.flags;
 		default:
 			return null;
@@ -91,10 +106,8 @@ public class SpiderPanelTableModel extends AbstractTableModel {
 	 * Removes all the elements. Method is synchronized internally.
 	 */
 	public void removeAllElements() {
-		synchronized (scanResults) {
-			scanResults.clear();
-			fireTableDataChanged();
-		}
+		scanResults.clear();
+		fireTableDataChanged();
 	}
 
 	/**
@@ -107,14 +120,8 @@ public class SpiderPanelTableModel extends AbstractTableModel {
 	 */
 	public void addScanResult(String uri, String method, String flags, boolean skipped) {
 		SpiderScanResult result = new SpiderScanResult(uri, method, flags, !skipped);
-		synchronized (scanResults) {
-			scanResults.add(result);
-			try {
-				fireTableRowsInserted(scanResults.size() - 1, scanResults.size() - 1);
-			} catch (IndexOutOfBoundsException e) {
-				// Happens occasionally but seems benign
-			}
-		}
+		scanResults.add(result);
+		fireTableRowsInserted(scanResults.size() - 1, scanResults.size() - 1);
 	}
 
 	/**
@@ -125,12 +132,10 @@ public class SpiderPanelTableModel extends AbstractTableModel {
 	 */
 	public void removesScanResult(String uri, String method) {
 		SpiderScanResult toRemove = new SpiderScanResult(uri, method);
-		synchronized (scanResults) {
-			int index = scanResults.indexOf(toRemove);
-			if (index >= 0) {
-				scanResults.remove(index);
-				fireTableRowsDeleted(index, index);
-			}
+		int index = scanResults.indexOf(toRemove);
+		if (index >= 0) {
+			scanResults.remove(index);
+			fireTableRowsDeleted(index, index);
 		}
 	}
 
@@ -231,4 +236,12 @@ public class SpiderPanelTableModel extends AbstractTableModel {
 			return true;
 		}
 	}
+
+    public List<String> getAddedNodes() {
+        List<String> list = new ArrayList<String>(this.scanResults.size());
+        for (SpiderScanResult res : this.scanResults) {
+            list.add(res.uri);
+        }
+        return list;
+    }
 }

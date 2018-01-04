@@ -63,7 +63,7 @@ public class GenericAuthenticationCredentials implements AuthenticationCredentia
 	public ApiResponse getApiResponseRepresentation() {
 		Map<String, String> values = new HashMap<>(paramValues);
 		values.put("type", API_NAME);
-		return new ApiResponseSet("credentials", values);
+		return new ApiResponseSet<String>("credentials", values);
 	}
 
 	/**
@@ -133,14 +133,14 @@ public class GenericAuthenticationCredentials implements AuthenticationCredentia
 				int userId = ApiUtils.getIntParam(params, UsersAPI.PARAM_USER_ID);
 				// Make sure the type of authentication method is compatible
 				if (!methodType.isTypeForMethod(context.getAuthenticationMethod()))
-					throw new ApiException(ApiException.Type.BAD_TYPE,
+					throw new ApiException(ApiException.Type.ILLEGAL_PARAMETER,
 							"User's credentials should match authentication method type of the context: "
 									+ context.getAuthenticationMethod().getType().getName());
 
 				// NOTE: no need to check if extension is loaded as this method is called only if
 				// the Users extension is loaded
-				ExtensionUserManagement extensionUserManagement = (ExtensionUserManagement) Control
-						.getSingleton().getExtensionLoader().getExtension(ExtensionUserManagement.NAME);
+				ExtensionUserManagement extensionUserManagement = Control.getSingleton()
+						.getExtensionLoader().getExtension(ExtensionUserManagement.class);
 				User user = extensionUserManagement.getContextUserAuthManager(context.getIndex())
 						.getUserById(userId);
 				if (user == null)

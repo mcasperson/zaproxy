@@ -66,7 +66,7 @@ public final class TimeStampUtils {
     * {@code format} fails a default format is used. 
     * The DEFAULT is defined in Messages.properties.
     * @see SimpleDateFormat
-    * @param a {@code String} representing the date format
+    * @param format a {@code String} representing the date format
     * @return current formatted time stamp as {@code String}
     */
 	public static String currentFormattedTimeStamp(String format) {
@@ -74,9 +74,7 @@ public final class TimeStampUtils {
 			SimpleDateFormat sdf = new SimpleDateFormat(format);
 			final String formattedTimeStamp = sdf.format(new Date());
 			return formattedTimeStamp; 
-		} catch (IllegalArgumentException e) {
-			return(TimeStampUtils.currentDefaultFormattedTimeStamp());  
-		} catch (NullPointerException e) {
+		} catch (IllegalArgumentException | NullPointerException e) {
 			return(TimeStampUtils.currentDefaultFormattedTimeStamp());  
 		} 
 	}
@@ -88,7 +86,7 @@ public final class TimeStampUtils {
     * If application of the provided {@code format} fails a default format is used. 
     * The DEFAULT format is defined in Messages.properties.
     * @param message the message to be time stamped
-    * @param the format to be used in creating the time stamp
+    * @param format the format to be used in creating the time stamp
     * @return a time stamp in the designated format along with the original message
     * 
     * @see SimpleDateFormat

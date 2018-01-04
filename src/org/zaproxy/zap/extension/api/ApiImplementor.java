@@ -27,8 +27,11 @@ import java.util.List;
 import net.sf.json.JSONException;
 import net.sf.json.JSONObject;
 
+import org.parosproxy.paros.Constant;
 import org.parosproxy.paros.common.AbstractParam;
+import org.parosproxy.paros.network.HttpInputStream;
 import org.parosproxy.paros.network.HttpMessage;
+import org.parosproxy.paros.network.HttpOutputStream;
 import org.zaproxy.zap.extension.api.API.RequestType;
 
 
@@ -64,6 +67,7 @@ public abstract class ApiImplementor {
 	private List<ApiView> apiViews = new ArrayList<>();
 	private List<ApiOther> apiOthers = new ArrayList<>();
 	private List<String> apiShortcuts = new ArrayList<>();
+	private List<ApiPersistentConnection> apiPersistentConnections = new ArrayList<>();
 	private AbstractParam param = null;
 	
 	public List<ApiView> getApiViews() {
@@ -94,7 +98,14 @@ public abstract class ApiImplementor {
 		this.apiShortcuts.add(shortcut);
 	}
 	
+	public void addApiPersistentConnection (ApiPersistentConnection pconn) {
+		this.apiPersistentConnections.add(pconn);
+	}
+	
 	/**
+	 * Adds the given options to the API implementor.
+	 * 
+	 * @param param the options for the API
 	 * @see ZapApiIgnore
 	 */
 	public void addApiOptions(AbstractParam param) {
@@ -109,28 +120,40 @@ public abstract class ApiImplementor {
 				continue;
 			}
 
+			boolean deprecated = method.getAnnotation(Deprecated.class) != null;
+
 			if (method.getName().startsWith("get") && method.getParameterTypes().length == 0) {
-				this.addApiView(new ApiView(GET_OPTION_PREFIX + method.getName().substring(3)));
+				ApiView view = new ApiView(GET_OPTION_PREFIX + method.getName().substring(3));
+				setApiOptionDeprecated(view, deprecated);
+				addApiView(view);
 			}
 			if (method.getName().startsWith("is") && method.getParameterTypes().length == 0) {
-				this.addApiView(new ApiView(GET_OPTION_PREFIX + method.getName().substring(2)));
+				ApiView view = new ApiView(GET_OPTION_PREFIX + method.getName().substring(2));
+				setApiOptionDeprecated(view, deprecated);
+				addApiView(view);
 			}
 			if (method.getName().startsWith("set") && method.getParameterTypes().length == 1 && 
 					method.getParameterTypes()[0].equals(String.class)) {
-				this.addApiAction(new ApiAction(SET_OPTION_PREFIX + method.getName().substring(3), 
-						new String[]{"String"}));
+				ApiAction action = new ApiAction(SET_OPTION_PREFIX + method.getName().substring(3), 
+						new String[]{"String"});
+				setApiOptionDeprecated(action, deprecated);
+				this.addApiAction(action);
 				addedActions.add(method.getName());
 			}
 			if (method.getName().startsWith("add") && method.getParameterTypes().length == 1 && 
 					method.getParameterTypes()[0].equals(String.class)) {
-				this.addApiAction(new ApiAction(ADD_OPTION_PREFIX + method.getName().substring(3), 
-						new String[]{"String"}));
+				ApiAction action = new ApiAction(ADD_OPTION_PREFIX + method.getName().substring(3), 
+						new String[]{"String"});
+				setApiOptionDeprecated(action, deprecated);
+				this.addApiAction(action);
 				addedActions.add(method.getName());
 			}
 			if (method.getName().startsWith("remove") && method.getParameterTypes().length == 1 && 
 					method.getParameterTypes()[0].equals(String.class)) {
-				this.addApiAction(new ApiAction(REMOVE_OPTION_PREFIX + method.getName().substring(6), 
-						new String[]{"String"}));
+				ApiAction action = new ApiAction(REMOVE_OPTION_PREFIX + method.getName().substring(6), 
+						new String[]{"String"});
+				setApiOptionDeprecated(action, deprecated);
+				this.addApiAction(action);
 				addedActions.add(method.getName());
 			}
 		}
@@ -140,13 +163,21 @@ public abstract class ApiImplementor {
 				continue;
 			}
 
+			boolean deprecated = method.getAnnotation(Deprecated.class) != null;
+
 			if (method.getName().startsWith("set") && method.getParameterTypes().length == 1 && ! addedActions.contains(method.getName())) {
 				// Non String setter
 				if (method.getParameterTypes()[0].equals(Integer.class) || method.getParameterTypes()[0].equals(int.class)) {
-					this.addApiAction(new ApiAction(SET_OPTION_PREFIX + method.getName().substring(3), new String[]{"Integer"}));
+					ApiAction action = new ApiAction(SET_OPTION_PREFIX + method.getName().substring(3),
+							new String[]{"Integer"});
+					setApiOptionDeprecated(action, deprecated);
+					this.addApiAction(action);
 					addedActions.add(method.getName());	// Just in case there are more overloads
 				} else if (method.getParameterTypes()[0].equals(Boolean.class) || method.getParameterTypes()[0].equals(boolean.class)) {
-					this.addApiAction(new ApiAction(SET_OPTION_PREFIX + method.getName().substring(3), new String[]{"Boolean"}));
+					ApiAction action = new ApiAction(SET_OPTION_PREFIX + method.getName().substring(3),
+							new String[]{"Boolean"});
+					setApiOptionDeprecated(action, deprecated);
+					this.addApiAction(action);
 					addedActions.add(method.getName());	// Just in case there are more overloads
 				}
 			}
@@ -168,6 +199,16 @@ public abstract class ApiImplementor {
 		return method.getAnnotation(ZapApiIgnore.class) != null || !Modifier.isPublic(method.getModifiers());
 	}
 
+	private void setApiOptionDeprecated(ApiElement apiOption, boolean deprecated) {
+		if (deprecated) {
+			apiOption.setDeprecated(deprecated);
+			if (Constant.messages != null) {
+				// Add a custom message when running from ZAP.
+				apiOption.setDeprecatedDescription(Constant.messages.getString("api.deprecated.option.endpoint"));
+			}
+		}
+	}
+	
 	public ApiResponse handleApiOptionView(String name, JSONObject params) throws ApiException {
 		if (this.param == null) {
 			return null;
@@ -256,10 +297,10 @@ public abstract class ApiImplementor {
 
 	/**
 	 * Override if implementing one or more views
-	 * @param name
-	 * @param params
-	 * @return
-	 * @throws ApiException
+	 * @param name the name of the requested view
+	 * @param params the API request parameters
+	 * @return the API response
+	 * @throws ApiException if an error occurred while handling the API view endpoint
 	 */
 	public ApiResponse handleApiView(String name, JSONObject params) throws ApiException {
 		throw new ApiException(ApiException.Type.BAD_VIEW, name);
@@ -267,10 +308,10 @@ public abstract class ApiImplementor {
 
 	/**
 	 * Override if implementing one or more actions
-	 * @param name
-	 * @param params
-	 * @return
-	 * @throws ApiException
+	 * @param name the name of the requested action
+	 * @param params the API request parameters
+	 * @return the API response
+	 * @throws ApiException if an error occurred while handling the API action endpoint
 	 */
 	public ApiResponse handleApiAction(String name, JSONObject params) throws ApiException {
 		throw new ApiException(ApiException.Type.BAD_ACTION, name);
@@ -278,21 +319,38 @@ public abstract class ApiImplementor {
 	
 	/**
 	 * Override if implementing one or more 'other' operations - these are operations that _dont_ return structured data
-	 * @param msg
-	 * @param name
-	 * @param params
-	 * @return
-	 * @throws ApiException
+	 * @param msg the HTTP message containing the API request
+	 * @param name the name of the requested other endpoint
+	 * @param params the API request parameters
+	 * @return the HTTP message with the API response
+	 * @throws ApiException if an error occurred while handling the API other endpoint
 	 */
 	public HttpMessage handleApiOther(HttpMessage msg, String name, JSONObject params) throws ApiException {
 		throw new ApiException(ApiException.Type.BAD_OTHER, name);
 	}
-	
+
+	/**
+	 * Override if implementing one or more 'persistent connection' operations. 
+	 * These are operations that maintain long running connections, potentially staying alive
+	 * as long as the client holds them open.
+	 * @param msg the HTTP message containing the API request
+	 * @param httpIn the input stream
+	 * @param httpOut the output stream
+	 * @param name the name of the requested pconn endpoint
+	 * @param params the API request parameters
+	 * @throws ApiException if an error occurred while handling the API pconn endpoint
+	 */
+	public void handleApiPersistentConnection(HttpMessage msg,
+			HttpInputStream httpIn, HttpOutputStream httpOut, String name,
+			JSONObject params) throws ApiException {
+		throw new ApiException(ApiException.Type.BAD_PCONN, name);
+	}
+
 	/**
 	 * Override if handling callbacks
-	 * @param msg
-	 * @return
-	 * @throws ApiException
+	 * @param msg the HTTP message containing the API request and response
+	 * @return the API response (set in the HTTP response body)
+	 * @throws ApiException if an error occurred while handling the API callback
 	 */
 	public String handleCallBack(HttpMessage msg)  throws ApiException {
 		throw new ApiException (ApiException.Type.URL_NOT_FOUND, msg.getRequestHeader().getURI().toString());
@@ -335,6 +393,19 @@ public abstract class ApiImplementor {
 		return this.apiShortcuts;
 	}
 
+	public ApiPersistentConnection getApiPersistentConnection(String name) {
+		for (ApiPersistentConnection pconn : this.apiPersistentConnections) {
+			if (pconn.getName().equals(name)) {
+				return pconn;
+			}
+		}
+		return null;
+	}
+
+	public List<ApiPersistentConnection> getApiPersistentConnections() {
+		return this.apiPersistentConnections;
+	}
+
 	protected int getParam(JSONObject params, String name, int defaultValue) {
 		try {
 			return params.getInt(name);
@@ -360,12 +431,27 @@ public abstract class ApiImplementor {
 	}
 
 	/**
+	 * Validates that a parameter with the given {@code name} exists (and it has a value) in the given {@code parameters}.
+	 *
+	 * @param parameters the parameters
+	 * @param name the name of the parameter that must exist
+	 * @throws ApiException if the parameter with the given name does not exist or it has no value.
+	 * @since 2.6.0
+	 */
+	protected void validateParamExists(JSONObject parameters, String name) throws ApiException {
+		if (!parameters.has(name) || parameters.getString(name).length() == 0) {
+			throw new ApiException(ApiException.Type.MISSING_PARAMETER, name);
+		}
+	}
+	
+	/**
 	 * Override to add custom headers for specific API operations
 	 * @param name	the name of the operation
 	 * @param type the type of the operation
-	 * @param header the response header to modify
+	 * @param msg the HTTP response message to the API request 
 	 */
 	public void addCustomHeaders(String name, RequestType type, HttpMessage msg) {
 		// Do nothing in the default implementation
 	}
+
 }

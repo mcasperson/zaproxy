@@ -34,9 +34,7 @@ import org.parosproxy.paros.db.DatabaseException;
 import org.parosproxy.paros.db.RecordContext;
 import org.parosproxy.paros.extension.ExtensionAdaptor;
 import org.parosproxy.paros.extension.ExtensionHook;
-import org.parosproxy.paros.model.Model;
 import org.parosproxy.paros.model.Session;
-import org.zaproxy.zap.extension.api.API;
 import org.zaproxy.zap.model.Context;
 import org.zaproxy.zap.model.ContextDataFactory;
 import org.zaproxy.zap.session.CookieBasedSessionManagementMethodType;
@@ -83,14 +81,24 @@ public class ExtensionSessionManagement extends ExtensionAdaptor implements Cont
 	}
 
 	@Override
+	public boolean supportsDb(String type) {
+		return true;
+	}
+
+	@Override
+	public String getUIName() {
+		return Constant.messages.getString("sessionmanagement.name");
+	}
+	
+	@Override
 	public void hook(ExtensionHook extensionHook) {
 		super.hook(extensionHook);
 		// Register this as a context data factory
-		Model.getSingleton().addContextDataFactory(this);
+		extensionHook.addContextDataFactory(this);
 
 		if (getView() != null) {
 			// Factory for generating Session Context UserAuth panels
-			getView().addContextPanelFactory(this);
+			extensionHook.getHookView().addContextPanelFactory(this);
 		}
 
 		// Load the Session Management methods
@@ -98,7 +106,7 @@ public class ExtensionSessionManagement extends ExtensionAdaptor implements Cont
 
 		// Register the api
 		this.api = new SessionManagementAPI(this);
-		API.getInstance().registerApiImplementor(api);
+		extensionHook.addApiImplementor(api);
 	}
 
 	@Override
@@ -203,7 +211,9 @@ public class ExtensionSessionManagement extends ExtensionAdaptor implements Cont
 
 	@Override
 	public void exportContextData(Context ctx, Configuration config) {
-		config.setProperty(CONTEXT_CONFIG_SESSION_TYPE, ctx.getSessionManagementMethod().getType().getUniqueIdentifier());
+		SessionManagementMethodType type = ctx.getSessionManagementMethod().getType();
+		config.setProperty(CONTEXT_CONFIG_SESSION_TYPE, type.getUniqueIdentifier());
+		type.exportData(config, ctx.getSessionManagementMethod());
 	}
 
 	@Override

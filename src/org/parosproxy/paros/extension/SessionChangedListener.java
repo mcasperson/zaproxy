@@ -22,6 +22,8 @@
 // ZAP: 2012/07/29 Issue 43: added sessionScopeChanged event
 // ZAP: 2012/08/01 Issue 332: added support for Modes
 // ZAP: 2013/03/03 Issue 546: Remove all template Javadoc comments
+// ZAP: 2016/09/22 JavaDoc tweaks
+// ZAP: 2017/06/07 Allow to notify of changes in the session's properties (e.g. name, description).
 
 package org.parosproxy.paros.extension;
 
@@ -33,16 +35,16 @@ public interface SessionChangedListener {
      * Called just after the session has changed.
      * sessionChanged may be called by non-event thread.  Should handle with care in
      * all the listener.  Use EventThread for each GUI event.
-     * @param session
+     * @param session the new session
      */
     void sessionChanged(Session session);
     
     /**
      * Called just prior to the session changing.
-     * Listeners should close down any resources associaited with this session. 
+     * Listeners should close down any resources associated with this session. 
      * sessionAboutToChange may be called by non-event thread.  Should handle with care in
      * all the listener.  Use EventThread for each GUI event.
-     * @param session
+     * @param session the session about to be closed
      */
     void sessionAboutToChange(Session session);
     
@@ -50,7 +52,7 @@ public interface SessionChangedListener {
      * Called when the user has changes the session scope.
      * sessionScopeChanged may be called by non-event thread.  Should handle with care in
      * all the listener.  Use EventThread for each GUI event.
-     * @param session
+     * @param session the current session
      */
     void sessionScopeChanged(Session session);
     
@@ -58,8 +60,18 @@ public interface SessionChangedListener {
      * Called when the user changes the mode.
      * sessionModeChanged may be called by non-event thread.  Should handle with care in
      * all the listener.  Use EventThread for each GUI event.
-     * @param mode
+     * @param mode the new mode
      */
     void sessionModeChanged(Mode mode);
     
+    /**
+     * Called when the session properties (e.g. name, description) have been changed.
+     * <p>
+     * This method may be called by other threads than {@link java.awt.EventQueue EventQueue}.
+     * 
+     * @param session the session changed.
+     * @since 2.7.0
+     */
+    default void sessionPropertiesChanged(Session session) {
+    }
 }
